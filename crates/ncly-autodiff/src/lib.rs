@@ -58,4 +58,4 @@ pub mod ops;
 mod variable;
 
 pub use dual::Dual;
-pub use variable::{LocalGrad, Tape, Variable, VariableNode};
+pub use variable::{LocalGrad, Tape, TapeGuard, Variable, VariableNode};

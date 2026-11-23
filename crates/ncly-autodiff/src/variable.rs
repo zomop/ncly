@@ -30,6 +30,7 @@
 //! * Broadcasting is handled by [`Variable::sum_to`], which collapses the
 //!   adjoint of the broadcast result back onto the operand's shape.
 
+use core::cell::RefCell;
 use core::fmt;
 use core::ops::{Add, Div, Mul, Neg, Sub};
 use ncly_core::{Layout, NclyError, Result, Shape, Strides};
@@ -297,6 +298,11 @@ fn sum_to_shape(value: &Tensor, target: &Shape) -> Result<Tensor> {
     Ok(current)
 }
 
+thread_local! {
+    /// Tape used by [`Variable::auto`] when a leaf joins the current recording.
+    static CURRENT_TAPE: RefCell<Option<Tape>> = const { RefCell::new(None) };
+}
+
 /// A handle to a differentiable value.
 ///
 /// Cloning a `Variable` clones the handle (same tape node), not the value.
@@ -328,6 +334,52 @@ impl Variable {
             tape: tape.clone(),
             index,
         }
+    }
+
+    /// Create a leaf that joins the thread's current tape.
+    ///
+    /// This is the ergonomic constructor: leaves created with [`Variable::auto`]
+    /// between [`Variable::with_tape`] and [`Variable::clear_tape`] share one
+    /// tape, so a gradient can flow across all of them. When no tape is active a
+    /// fresh one is started and installed.
+    pub fn auto(value: f64, name: impl Into<String>) -> Self {
+        Self::auto_tensor(Tensor::scalar(value), name)
+    }
+
+    /// Like [`Variable::auto`] for tensors.
+    pub fn auto_tensor(value: Tensor, name: impl Into<String>) -> Self {
+        CURRENT_TAPE.with(|current| {
+            let mut slot = current.borrow_mut();
+            let tape = slot.get_or_insert_with(Tape::new).clone();
+            Self::on_tape(&tape, value, name)
+        })
+    }
+
+    /// Install `tape` as the thread's current tape and return a guard that
+    /// restores the previous one on drop.
+    ///
+    /// ```
+    /// use ncly_autodiff::{Tape, Variable};
+    ///
+    /// let tape = Tape::new();
+    /// let guard = Variable::with_tape(&tape);
+    /// let x = Variable::auto(2.0, "x");
+    /// let y = Variable::auto(3.0, "y");
+    /// let loss = (&x * &y).sum();
+    /// loss.backward();
+    /// assert!((x.grad_scalar().unwrap() - 3.0).abs() < 1e-12);
+    /// drop(guard);
+    /// ```
+    pub fn with_tape(tape: &Tape) -> TapeGuard {
+        let previous = CURRENT_TAPE.with(|current| current.borrow_mut().replace(tape.clone()));
+        TapeGuard { previous }
+    }
+
+    /// Remove the thread's current tape.
+    pub fn clear_tape() {
+        CURRENT_TAPE.with(|current| {
+            current.borrow_mut().take();
+        });
     }
 
     /// The tape this variable lives on.
@@ -523,6 +575,16 @@ impl Variable {
         self.record("abs", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
+    /// `1/x`.
+    pub fn recip(&self) -> Variable {
+        let one = Variable::on_tape(
+            &self.tape,
+            Tensor::ones(self.value().shape().dims().to_vec()),
+            "one",
+        );
+        Variable::div(&one, self)
+    }
+
     /// Element-wise negation.
     pub fn neg(&self) -> Variable {
         let data = self.value().neg();
@@ -598,7 +660,8 @@ impl Variable {
     /// Broadcast to a larger shape.
     ///
     /// The adjoint is summed back down to the operand shape by
-    /// [`sum_to_shape`], which is exactly the transpose of broadcasting.
+    /// the internal `sum_to_shape` helper, which is exactly the transpose
+    /// of broadcasting.
     pub fn broadcast_to(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target = Shape::new(shape.into());
@@ -644,6 +707,22 @@ impl Variable {
     /// Describe this variable and its ancestors.
     pub fn describe(&self) -> String {
         self.tape.describe()
+    }
+}
+
+/// Restores the previous thread-local tape when dropped.
+#[derive(Debug)]
+#[must_use = "the guard keeps the tape installed only while it is alive"]
+pub struct TapeGuard {
+    previous: Option<Tape>,
+}
+
+impl Drop for TapeGuard {
+    fn drop(&mut self) {
+        let previous = self.previous.take();
+        CURRENT_TAPE.with(|current| {
+            *current.borrow_mut() = previous;
+        });
     }
 }
 
@@ -738,8 +817,10 @@ mod tests {
 
     #[test]
     fn product_rule_two_variables() {
-        let x = Variable::new(2.0, "x");
-        let y = Variable::new(3.0, "y");
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto(2.0, "x");
+        let y = Variable::auto(3.0, "y");
         let f = (&x * &y).powi(2).sum();
         f.backward();
         assert!((x.grad_scalar().unwrap() - 36.0).abs() < 1e-12);
@@ -758,7 +839,7 @@ mod tests {
             ("powi", |v| v.powi(3), 2.0, 12.0),
             ("abs", |v| v.abs(), -3.0, -1.0),
             ("neg", |v| v.neg(), 5.0, -1.0),
-            ("recip", |v| Variable::div(&v.scale(1.0), v), 2.0, -0.25),
+            ("recip", |v| v.recip(), 2.0, -0.25),
         ];
         for (name, build, x0, expected) in cases {
             let x = Variable::new(x0, name);
@@ -774,8 +855,10 @@ mod tests {
 
     #[test]
     fn broadcasting_backpropagates_correctly() {
-        let x = Variable::from_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0], [3]).unwrap(), "x");
-        let y = Variable::from_tensor(Tensor::from_vec(vec![10.0, 20.0], [2, 1]).unwrap(), "y");
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0], [3]).unwrap(), "x");
+        let y = Variable::auto_tensor(Tensor::from_vec(vec![10.0, 20.0], [2, 1]).unwrap(), "y");
         let z = (&x + &y).sum();
         z.backward();
         assert_eq!(x.grad().to_vec(), vec![1.0, 1.0, 1.0]);
@@ -784,15 +867,19 @@ mod tests {
 
     #[test]
     fn mean_gradient_is_one_over_n() {
-        let x = Variable::from_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [4]).unwrap(), "x");
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [4]).unwrap(), "x");
         x.mean().backward();
         assert_eq!(x.grad().to_vec(), vec![0.25; 4]);
     }
 
     #[test]
     fn matmul_gradient() {
-        let a = Variable::from_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [2, 2]).unwrap(), "a");
-        let b = Variable::from_tensor(Tensor::from_vec(vec![1.0, 0.0, 0.0, 1.0], [2, 2]).unwrap(), "b");
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let a = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [2, 2]).unwrap(), "a");
+        let b = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 0.0, 0.0, 1.0], [2, 2]).unwrap(), "b");
         let c = a.matmul(&b).unwrap().sum();
         c.backward();
         // d/dA sum(A·I) = ones(2,2) ; d/dB = ones(2,2)
@@ -802,7 +889,9 @@ mod tests {
 
     #[test]
     fn logsumexp_is_numerically_stable() {
-        let x = Variable::from_tensor(Tensor::from_vec(vec![1000.0, 1000.0], [2]).unwrap(), "x");
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto_tensor(Tensor::from_vec(vec![1000.0, 1000.0], [2]).unwrap(), "x");
         let y = x.logsumexp();
         y.backward();
         let value = y.scalar().unwrap();
@@ -836,7 +925,9 @@ mod tests {
 
     #[test]
     fn reshape_and_transpose_preserve_gradient_mass() {
-        let x = Variable::from_tensor(
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto_tensor(
             Tensor::from_vec((0..6).map(f64::from).collect(), [2, 3]).unwrap(),
             "x",
         );

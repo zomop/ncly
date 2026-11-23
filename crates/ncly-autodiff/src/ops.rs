@@ -37,5 +37,5 @@ pub fn softplus(value: &Variable) -> Variable {
 pub fn sigmoid(value: &Variable) -> Variable {
     let one = Variable::on_tape(value.tape(), ncly_tensor::Tensor::scalar(1.0), "one");
     let denominator = one.add(&value.neg().exp());
-    Variable::div(&one, &denominator)
+    denominator.recip()
 }

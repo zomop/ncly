@@ -446,15 +446,35 @@ pub struct Broadcast {
 }
 
 impl Broadcast {
-    /// Compute the broadcast plan from `shape` to `target`.
+    /// Compute the broadcast plan from `shape` to `target`, assuming `shape`
+    /// is contiguous.
     pub fn plan(shape: &Shape, target: &Shape) -> Result<Self> {
+        Self::plan_with_strides(shape, &shape.canonical_strides(), target)
+    }
+
+    /// Compute the broadcast plan for an operand with explicit `strides`.
+    ///
+    /// This is the version the tensor engine uses: a transposed or narrowed view
+    /// must keep its own strides, otherwise broadcasting would read the wrong
+    /// memory.
+    pub fn plan_with_strides(shape: &Shape, strides: &Strides, target: &Shape) -> Result<Self> {
         if shape.rank() > target.rank() {
             return Err(NclyError::invalid_shape(
                 "broadcast",
                 format!("source {shape} has higher rank than target {target}"),
             ));
         }
-        let source = shape.canonical_strides();
+        if strides.rank() != shape.rank() {
+            return Err(NclyError::invalid_shape(
+                "broadcast",
+                format!(
+                    "source {shape} has rank {} but {} strides were supplied",
+                    shape.rank(),
+                    strides.rank()
+                ),
+            ));
+        }
+        let source = strides.clone();
         let pad = target.rank() - shape.rank();
         let mut strides = vec![0isize; target.rank()];
         for axis in 0..shape.rank() {
@@ -462,12 +482,12 @@ impl Broadcast {
             let src_len = shape.dims()[axis];
             let dst_len = target.dims()[target_axis];
             if src_len == dst_len {
-                strides[target_axis] = source.as_slice()[axis];
+                strides[target_axis] = source.get(axis).unwrap_or(0);
             } else if src_len == 1 {
                 strides[target_axis] = 0;
             } else {
                 return Err(AxisError::IncompatibleLength {
-                    axis,
+                    axis: axis + pad,
                     lhs: src_len,
                     rhs: dst_len,
                 }

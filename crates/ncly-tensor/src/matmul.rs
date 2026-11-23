@@ -45,7 +45,7 @@ const COLUMN_BLOCK: usize = 64;
 
 /// Dense matrix product.
 ///
-/// See the [module documentation](self) for the shape rules.
+/// See the module-level documentation above for the shape rules.
 pub fn matmul(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
     let a = lhs.shape().dims();
     let b = rhs.shape().dims();

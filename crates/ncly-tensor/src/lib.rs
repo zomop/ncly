@@ -1,6 +1,6 @@
 //! The NCLY tensor engine.
 //!
-//! A [`Tensor`] is an `f64` buffer plus a [`Layout`] describing how logical
+//! A [`Tensor`] is an `f64` buffer plus a [`Layout`](ncly_core::Layout) describing how logical
 //! indices map onto that buffer. The same type therefore represents:
 //!
 //! | Concept | Layout |

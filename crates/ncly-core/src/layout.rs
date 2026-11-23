@@ -151,7 +151,7 @@ impl Layout {
 
     /// Broadcast this layout to `target`, using zero strides on new axes.
     pub fn broadcast_to(&self, target: &Shape) -> Result<Self> {
-        let plan = crate::shape::Broadcast::plan(&self.shape, target)?;
+        let plan = crate::shape::Broadcast::plan_with_strides(&self.shape, &self.strides, target)?;
         Ok(Self {
             shape: target.clone(),
             strides: Strides::new(plan.strides),
