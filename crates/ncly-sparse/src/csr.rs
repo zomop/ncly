@@ -596,7 +596,7 @@ mod tests {
         let x = [1.0, 2.0, 3.0];
         let y = a.spmv_transpose(&x).unwrap();
         assert_eq!(y, vec![130.0, 60.0, 170.0]);
-        assert_eq!(a.to_csc().spmv(&x), a.spmv(&x));
+        assert_eq!(a.to_csc().spmv(&x).unwrap(), a.spmv(&x));
     }
 
     #[test]

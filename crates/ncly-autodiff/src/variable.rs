@@ -32,7 +32,7 @@
 
 use core::fmt;
 use core::ops::{Add, Div, Mul, Neg, Sub};
-use ncly_core::{Layout, NclyError, Result, Shape};
+use ncly_core::{Layout, NclyError, Result, Shape, Strides};
 use ncly_tensor::Tensor;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -579,7 +579,7 @@ impl Variable {
             .to_contiguous()
             .reshape(target.clone())?;
         let local = Tensor::ones(value.shape().dims().to_vec());
-        Ok(self.record("reshape", data, vec![(self.index, local)]))
+        Ok(self.record("reshape", data, vec![(self.index, LocalGrad::Elementwise(local))]))
     }
 
     /// Transpose (reverses axes).
@@ -592,7 +592,7 @@ impl Variable {
                 reason: "transpose changed the element count".into(),
             });
         }
-        Ok(self.record("transpose", data, vec![(self.index, local)]))
+        Ok(self.record("transpose", data, vec![(self.index, LocalGrad::Elementwise(local))]))
     }
 
     /// Broadcast to a larger shape.

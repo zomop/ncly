@@ -393,9 +393,9 @@ mod tests {
     #[test]
     fn scalar_mixing() {
         let x = Dual::variable(2.0);
-        assert_eq!((x * 3.0).tangent, 3.0);
-        assert_eq!((3.0 * x).tangent, 3.0);
-        assert_eq!((x + 1).value, 3.0);
+        assert_eq!((x * 3.0f64).tangent, 3.0);
+        assert_eq!((3.0f64 * x).tangent, 3.0);
+        assert_eq!((x + 1i32).value, 3.0);
         assert_eq!((x / 2.0).tangent, 0.5);
     }
 
