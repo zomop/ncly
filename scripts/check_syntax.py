@@ -23,7 +23,7 @@ def walk(node):
 
 
 def main() -> int:
-    root = pathlib.Path(__file__).parent
+    root = pathlib.Path(__file__).resolve().parent.parent
     failures = 0
     files = 0
     for path in sorted(root.rglob("*.rs")):

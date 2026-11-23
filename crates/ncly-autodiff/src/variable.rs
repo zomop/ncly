@@ -378,7 +378,13 @@ impl Variable {
         self.tape.zero_grad();
     }
 
-    fn record(&self, op: &'static str, data: Tensor, parents: Vec<(usize, Tensor)>) -> Variable {
+    fn record(&self, op: &'static str, data: Tensor, parents: Vec<(usize, LocalGrad)>) -> Variable {
+        // A node whose value is not finite would corrupt the whole sweep, so the
+        // check happens here, once, rather than inside every kernel.
+        debug_assert!(
+            data.len() == 0 || data.all_finite() || data.has_nan(),
+            "ncly-autodiff: {op} produced a mixture of finite and infinite values"
+        );
         let index = self.tape.record(op, data, parents);
         Variable {
             tape: self.tape.clone(),
@@ -752,7 +758,7 @@ mod tests {
             ("powi", |v| v.powi(3), 2.0, 12.0),
             ("abs", |v| v.abs(), -3.0, -1.0),
             ("neg", |v| v.neg(), 5.0, -1.0),
-            ("recip", |v| v.scale(1.0).div(v), 2.0, -0.25),
+            ("recip", |v| Variable::div(&v.scale(1.0), v), 2.0, -0.25),
         ];
         for (name, build, x0, expected) in cases {
             let x = Variable::new(x0, name);
