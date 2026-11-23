@@ -1,0 +1,26 @@
+name: devcheck
+on:
+  push:
+    branches: ['arena/**']
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - name: build and test
+        run: |
+          set +e
+          {
+            rustc --version
+            echo "=== cargo build ==="
+            cargo build --workspace --all-targets 2>&1 | tail -150
+            echo "=== cargo test ==="
+            cargo test --workspace 2>&1 | tail -120
+          } > /tmp/log.txt 2>&1
+          python3 .github/ci/post_log.py /tmp/log.txt
+          tail -40 /tmp/log.txt

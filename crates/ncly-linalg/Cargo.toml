@@ -1,0 +1,13 @@
+[package]
+name = "ncly-linalg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "NCLY linalg crate (in progress)"
+
+[dependencies]
+
+[lints]
+workspace = true

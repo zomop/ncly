@@ -1,0 +1,25 @@
+[package]
+name = "ncly"
+description = "Numerical computing in Rust: tensors, automatic differentiation, linear algebra and sparse solvers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
+ncly-simd = { workspace = true }
+ncly-autodiff = { workspace = true }
+ncly-linalg = { workspace = true }
+ncly-sparse = { workspace = true }
+
+[lints]
+workspace = true
