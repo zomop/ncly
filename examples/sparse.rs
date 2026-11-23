@@ -25,7 +25,12 @@ fn main() -> Result<(), NclyError> {
     }
 
     let laplacian = CsrMatrix::from_triplets(n, n, &rows, &cols, &values)?;
-    println!("shape {}x{}, nnz = {}", laplacian.rows(), laplacian.cols(), laplacian.nnz());
+    println!(
+        "shape {}x{}, nnz = {}",
+        laplacian.rows(),
+        laplacian.cols(),
+        laplacian.nnz()
+    );
 
     // A·1 = e_0 + e_{n-1} for this stencil.
     let ax = laplacian.spmv(&vec![1.0; n]);
@@ -52,7 +57,10 @@ fn main() -> Result<(), NclyError> {
     let x = vec![1.0; n];
     let dense_rows = linalg_matvec(&squared.to_dense(), &x, n);
     for (i, (sparse, dense)) in squared.spmv(&x).iter().zip(&dense_rows).enumerate() {
-        assert!((sparse - dense).abs() < 1e-12, "row {i}: {sparse} vs {dense}");
+        assert!(
+            (sparse - dense).abs() < 1e-12,
+            "row {i}: {sparse} vs {dense}"
+        );
     }
     println!("sparse and dense agree.");
     Ok(())

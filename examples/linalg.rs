@@ -11,14 +11,20 @@ fn main() -> Result<(), NclyError> {
     let b = [10.0, 12.0];
     let x = linalg::solve(&a, &b, 2)?;
     println!("LU solve         x = [{:.6}, {:.6}]", x[0], x[1]);
-    println!("residual         ‖Ax-b‖ = {:.3e}", linalg::residual(&a, &x, &b, 2, 2)?);
+    println!(
+        "residual         ‖Ax-b‖ = {:.3e}",
+        linalg::residual(&a, &x, &b, 2, 2)?
+    );
 
     // --- QR least squares for an overdetermined system ---------------------
     // Points (1,1), (1,3), (1,5) with the design matrix [1 0; 1 1; 1 2].
     let design = [1.0, 0.0, 1.0, 1.0, 1.0, 2.0];
     let targets = [1.0, 3.0, 5.0];
     let fit = linalg::lstsq(&design, &targets, 3, 2)?;
-    println!("least squares    intercept = {:.6}, slope = {:.6}", fit[0], fit[1]);
+    println!(
+        "least squares    intercept = {:.6}, slope = {:.6}",
+        fit[0], fit[1]
+    );
 
     let factorisation = Qr::factor(&design, 3, 2)?;
     let q = factorisation.q();
