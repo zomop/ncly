@@ -12,6 +12,7 @@ members = [
     "crates/ncly",
     "crates/ncly-python",
     "tests/integration",
+    "benchmarks",
 ]
 
 [workspace.package]
