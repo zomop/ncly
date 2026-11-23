@@ -43,9 +43,9 @@ pub mod solve;
 
 pub use cholesky::Cholesky;
 pub use eigen::{eigenvalues, Eigen};
+pub use lib_norm::matrix_norm_inf;
 pub use lu::Lu;
 pub use matrix::Matrix;
-pub use lib_norm::matrix_norm_inf;
 pub use qr::Qr;
 pub use solve::{inverse, lstsq, residual, solve};
 
@@ -69,4 +69,3 @@ pub(crate) fn check_dims(op: &'static str, data: &[f64], rows: usize, cols: usiz
     }
     Ok(())
 }
-

@@ -637,9 +637,7 @@ fn nest(py: Python<'_>, data: &[f64], dims: &[usize], offset: usize) -> PyResult
         return Ok(data[offset].into_pyobject(py)?.into_any().unbind());
     }
     if dims.len() == 1 {
-        let values: Vec<f64> = (0..dims[0])
-            .map(|i| data[offset + i])
-            .collect();
+        let values: Vec<f64> = (0..dims[0]).map(|i| data[offset + i]).collect();
         return Ok(PyList::new(py, values)?.into_any().unbind());
     }
     let stride: usize = dims[1..].iter().product();
