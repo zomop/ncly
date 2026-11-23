@@ -33,7 +33,7 @@
 use core::cell::RefCell;
 use core::fmt;
 use core::ops::{Add, Div, Mul, Neg, Sub};
-use ncly_core::{Layout, NclyError, Result, Shape, Strides};
+use ncly_core::{NclyError, Result, Shape};
 use ncly_tensor::Tensor;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -56,6 +56,12 @@ pub enum LocalGrad {
     /// Matrix-product adjoint for the right operand: `Aᵀ · G`.
     /// The payload is the *other* operand `A` with shape `(m, k)`.
     MatmulRight(Tensor),
+    /// Scatter the adjoint back onto a fixed position selection.
+    ///
+    /// Used by reductions: `max`/`min` route the whole adjoint to the position
+    /// that achieved the extremum, and the payload is the list of flat indices
+    /// of those positions.
+    FixedIndex(Vec<usize>),
 }
 
 /// One recorded operation.
@@ -239,6 +245,25 @@ impl Tape {
                         permuted
                     }
                     LocalGrad::Reshape(shape) => adjoint.to_contiguous().reshape(shape)?,
+                    LocalGrad::FixedIndex(indices) => {
+                        if indices.len() != adjoint.len() {
+                            return Err(NclyError::Graph {
+                                reason: format!(
+                                    "index gradient has {} entries but the adjoint has {}",
+                                    indices.len(),
+                                    adjoint.len()
+                                ),
+                            });
+                        }
+                        let source = adjoint.to_vec();
+                        let mut buffer = vec![0.0; target.size()];
+                        for (position, &flat) in indices.iter().enumerate() {
+                            if flat < buffer.len() {
+                                buffer[flat] += source[position];
+                            }
+                        }
+                        Tensor::from_vec(buffer, target.dims().to_vec())?
+                    }
                     LocalGrad::MatmulLeft(other) => {
                         // d(A·B)/dA = G·Bᵀ
                         adjoint.matmul(&other.transpose().to_contiguous())?
@@ -275,6 +300,22 @@ impl Tape {
         }
         out
     }
+}
+
+/// Read an element of `value` as if it were broadcast to `index`'s shape.
+fn broadcast_get(value: &Tensor, index: &[usize]) -> f64 {
+    let rank = value.rank();
+    let pad = index.len().saturating_sub(rank);
+    let mut local = vec![0usize; rank];
+    for axis in 0..rank {
+        let source = index[axis + pad];
+        local[axis] = if value.shape().dims()[axis] == 1 {
+            0
+        } else {
+            source
+        };
+    }
+    value.get_unchecked(&local)
 }
 
 /// Reorder the axes of `value` and materialise the result.
@@ -826,6 +867,42 @@ impl Variable {
         )
     }
 
+    /// Element-wise maximum, differentiable on the side that wins.
+    ///
+    /// Ties are resolved in favour of the left operand, which keeps the
+    /// subgradient deterministic. Where the operands are equal the derivative is
+    /// genuinely undefined; NCLY does not average the two.
+    pub fn maximum(&self, rhs: &Variable) -> Variable {
+        let (a, b) = (self.value(), rhs.value());
+        let data = a.maximum(&b).expect("broadcast failed in maximum");
+        let lhs_mask = Tensor::from_fn(data.shape().dims().to_vec(), |index| {
+            let x = broadcast_get(&a, index);
+            let y = broadcast_get(&b, index);
+            if x >= y {
+                1.0
+            } else {
+                0.0
+            }
+        });
+        let rhs_mask = Tensor::from_fn(data.shape().dims().to_vec(), |index| {
+            let x = broadcast_get(&a, index);
+            let y = broadcast_get(&b, index);
+            if x >= y {
+                0.0
+            } else {
+                1.0
+            }
+        });
+        self.record(
+            "maximum",
+            data,
+            vec![
+                (self.index, LocalGrad::Elementwise(lhs_mask)),
+                (rhs.index, LocalGrad::Elementwise(rhs_mask)),
+            ],
+        )
+    }
+
     /// Materialise the primal value.
     pub fn to_tensor(&self) -> Tensor {
         self.value()
@@ -1019,12 +1096,22 @@ mod tests {
         );
         let c = a.matmul(&b).unwrap().sum();
         c.backward();
-        // With B = [[1,0],[0,1]]: d/dA sum(A·B) = 1·Bᵀ = B, i.e. the identity
-        // rows, and d/dB = Aᵀ · 1ᵀ = Aᵀ.
-        assert_eq!(a.grad().to_vec(), vec![1.0, 0.0, 0.0, 1.0]);
+        // The loss is sum(A·B), so dL/dA = 1·Bᵀ = ones·Bᵀ. With B = I that is
+        // ones(2,2); dL/dB = Aᵀ·1 = Aᵀ.
+        assert_eq!(a.grad().to_vec(), vec![1.0; 4]);
         assert_eq!(b.grad().to_vec(), vec![1.0, 3.0, 2.0, 4.0]);
-        // Sanity: the count of ones in dA equals the count in B.
-        assert_eq!(a.grad().to_vec().iter().filter(|&&v| v == 1.0).count(), 2);
+    }
+
+    #[test]
+    fn maximum_routes_the_gradient_to_the_winner() {
+        let tape = Tape::new();
+        let _guard = Variable::with_tape(&tape);
+        let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 5.0, 2.0], [3]).unwrap(), "x");
+        let y = Variable::auto_tensor(Tensor::from_vec(vec![4.0, 4.0, 4.0], [3]).unwrap(), "y");
+        x.maximum(&y).sum().backward();
+        // x wins at position 1, y wins at positions 0 and 2.
+        assert_eq!(x.grad().to_vec(), vec![0.0, 1.0, 0.0]);
+        assert_eq!(y.grad().to_vec(), vec![1.0, 0.0, 1.0]);
     }
 
     #[test]

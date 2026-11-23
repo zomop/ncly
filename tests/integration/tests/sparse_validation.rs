@@ -173,12 +173,14 @@ fn large_sparse_system_is_solvable_by_iteration_contract() {
     assert_eq!(laplacian.nnz(), 3 * n - 2);
 
     // xᵀAx > 0 for x = ones, and Ax for ones is zero except at the ends.
+    // A*1 for the 1-d Laplacian (2 on the diagonal, -1 off-diagonal) is 1 at
+    // both ends and 0 in the interior.
     let ones = vec![1.0; n];
     let ax = laplacian.spmv(&ones);
-    assert!(ax[0].abs() < 1e-12);
-    assert!(ax[n - 1].abs() < 1e-12);
-    for value in &ax[1..n - 1] {
-        assert!(value.abs() < 1e-12);
+    assert!((ax[0] - 1.0).abs() < 1e-12, "first entry {}", ax[0]);
+    assert!((ax[n - 1] - 1.0).abs() < 1e-12, "last entry {}", ax[n - 1]);
+    for (i, value) in ax[1..n - 1].iter().enumerate() {
+        assert!(value.abs() < 1e-12, "entry {} is {}", i + 1, value);
     }
 
     // A random vector gives a strictly positive quadratic form.

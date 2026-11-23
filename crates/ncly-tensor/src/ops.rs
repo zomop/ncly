@@ -658,6 +658,48 @@ impl Tensor {
         Ok(result)
     }
 
+    /// Flat indices where the tensor is non-zero.
+    ///
+    /// Used by gradient rules that scatter (for example the adjoint of `max`
+    /// along an axis). Only the *first* position matters for those rules, so the
+    /// result is not sorted in any particular way.
+    pub fn where_nonzero(&self) -> Vec<usize> {
+        let mut out = Vec::new();
+        self.for_each_flat(|flat| {
+            if self.storage[flat] != 0.0 {
+                out.push(flat);
+            }
+        });
+        out
+    }
+
+    /// Gather rows of a 2-d tensor by flat index, preserving the input order.
+    ///
+    /// Returns a tensor with shape `(indices.len(), cols)`. Indices refer to the
+    /// logical row number (`0..rows`).
+    pub fn index_select_rows(&self, indices: &[usize]) -> Result<Tensor> {
+        if self.rank() != 2 {
+            return Err(NclyError::invalid_shape(
+                "index_select_rows",
+                "tensor must be 2-d",
+            ));
+        }
+        let cols = self.shape().dims()[1];
+        let mut out = Vec::with_capacity(indices.len() * cols);
+        for &row in indices {
+            if row >= self.shape().dims()[0] {
+                return Err(NclyError::IndexOutOfBounds {
+                    index: vec![row, 0],
+                    shape: self.shape().to_string(),
+                });
+            }
+            for col in 0..cols {
+                out.push(self.get(&[row, col])?);
+            }
+        }
+        Tensor::from_vec(out, [indices.len(), cols])
+    }
+
     /// Matrix product of the last two axes (batched via broadcasting).
     ///
     /// See [`crate::matmul`] for the algorithm and precision notes.

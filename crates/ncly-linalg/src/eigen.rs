@@ -128,9 +128,16 @@ pub fn symmetric_with_tolerance(a: &[f64], n: usize, tolerance: f64) -> Result<E
                 }
                 let app = m[p * n + p];
                 let aqq = m[q * n + q];
-                // Rotation angle that zeroes the (p, q) entry:
-                //   θ = ½ atan2(2a_pq, a_pp - a_qq)
-                let theta = 0.5 * (2.0 * apq).atan2(app - aqq);
+                // Rotation that zeroes the (p, q) entry. With
+                //     G = [[c, s], [-s, c]]
+                // the updated entry is
+                //     a'_pq = a_pq (c² - s²) + (a_pp - a_qq) c s,
+                // which vanishes for
+                //     θ = ½ atan2(2 a_pq, a_qq - a_pp).
+                // The sign of the second argument matters: using a_pp - a_qq
+                // rotates the wrong way and the sweep does not converge.
+                let _ = app;
+                let theta = 0.5 * (2.0 * apq).atan2(aqq - app);
                 let (s, c) = theta.sin_cos();
 
                 // Apply Jᵀ A J to rows/columns p and q.
