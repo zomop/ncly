@@ -214,10 +214,7 @@ fn symmetric_eigen_decomposition_is_accurate() {
         .map(|(x, y)| 0.5 * (x + y))
         .collect();
 
-    let eigen::Eigen {
-        values,
-        vectors,
-    } = eigen::symmetric(&a, n).unwrap();
+    let eigen::Eigen { values, vectors } = eigen::symmetric(&a, n).unwrap();
     assert_eq!(values.len(), n);
 
     // Every pair must satisfy A·v = λ·v and every v must be a unit vector.
@@ -239,7 +236,10 @@ fn symmetric_eigen_decomposition_is_accurate() {
     for i in 0..n {
         for j in i + 1..n {
             let dot: f64 = vectors[i].iter().zip(&vectors[j]).map(|(a, b)| a * b).sum();
-            assert!(dot.abs() < 1e-9, "eigenvectors {i}, {j} not orthogonal: {dot}");
+            assert!(
+                dot.abs() < 1e-9,
+                "eigenvectors {i}, {j} not orthogonal: {dot}"
+            );
         }
     }
 
@@ -285,7 +285,10 @@ fn determinant_signs_and_magnitudes() {
     // Large determinants must not overflow.
     let big = [1e200, 0.0, 0.0, 1e200];
     let lu = Lu::factor(&big, 2).unwrap();
-    assert!(lu.determinant().is_infinite(), "1e400 overflows to infinity");
+    assert!(
+        lu.determinant().is_infinite(),
+        "1e400 overflows to infinity"
+    );
     let (log_abs, sign) = lu.log_determinant();
     assert!((log_abs - 2.0 * 1e200f64.ln()).abs() < 1e-9);
     assert_eq!(sign, 1.0);

@@ -4,7 +4,12 @@ use ncly_integration_tests::{assert_close, max_abs_diff, Rng};
 use ncly_sparse::{CscMatrix, CsrMatrix};
 
 /// Build a random sparse matrix with roughly `density` fill.
-fn random_sparse(rows: usize, cols: usize, density: f64, seed: u64) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
+fn random_sparse(
+    rows: usize,
+    cols: usize,
+    density: f64,
+    seed: u64,
+) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
     let mut rng = Rng::new(seed);
     let mut r = Vec::new();
     let mut c = Vec::new();
@@ -91,7 +96,12 @@ fn csc_and_csr_formats_agree() {
 
     let mut rng = Rng::new(5);
     let x: Vec<f64> = (0..9).map(|_| rng.range(-1.0, 1.0)).collect();
-    assert_close(&csr.spmv(&x), &csc.spmv(&x).unwrap(), 1e-14, "csr vs csc spmv");
+    assert_close(
+        &csr.spmv(&x),
+        &csc.spmv(&x).unwrap(),
+        1e-14,
+        "csr vs csc spmv",
+    );
     assert_eq!(csr.to_csc().to_csr(), csr);
 }
 

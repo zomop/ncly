@@ -13,8 +13,8 @@
 //! signal that the rule itself is wrong rather than its implementation.
 
 use ncly_autodiff::{ops, Dual, Tape, Variable};
-use ncly_tensor::Tensor;
 use ncly_integration_tests::{assert_close, central_difference, max_abs_diff, Rng};
+use ncly_tensor::Tensor;
 
 /// Tolerance for analytic-vs-analytic comparisons (bit-level agreement expected).
 const EXACT: f64 = 1e-10;
@@ -29,7 +29,11 @@ fn scalar_compositions_match_finite_differences() {
         ("x^2 + 3x", |d| d * d + 3.0f64 * d, |x| x * x + 3.0 * x),
         ("sin(x)cos(x)", |d| d.sin() * d.cos(), |x| x.sin() * x.cos()),
         ("exp(-x^2)", |d| -(d * d).exp(), |x| -(x * x).exp()),
-        ("ln(1+x^2)", |d| (1.0f64 + d * d).ln(), |x| (1.0 + x * x).ln()),
+        (
+            "ln(1+x^2)",
+            |d| (1.0f64 + d * d).ln(),
+            |x| (1.0 + x * x).ln(),
+        ),
         (
             "tanh(x) + x^3",
             |d| d.tanh() + d.powi(3),
@@ -93,10 +97,7 @@ fn multivariate_gradient_matches_finite_differences() {
     let x = Variable::auto(x0, "x");
     let y = Variable::auto(y0, "y");
     let product = &x * &y;
-    let f = product
-        .sin()
-        .add(&x.mul(&y).mul(&x))
-        .sub(&x.sub(&y).exp());
+    let f = product.sin().add(&x.mul(&y).mul(&x)).sub(&x.sub(&y).exp());
     f.sum().backward();
     let (gx, gy) = (x.grad_scalar().unwrap(), y.grad_scalar().unwrap());
     drop(guard);
@@ -105,8 +106,14 @@ fn multivariate_gradient_matches_finite_differences() {
     let numeric_x = central_difference(|a| scalar(a, y0), x0, NUMERIC);
     let numeric_y = central_difference(|b| scalar(x0, b), y0, NUMERIC);
 
-    assert!((gx - numeric_x).abs() < NUMERIC * 5.0, "df/dx {gx} vs {numeric_x}");
-    assert!((gy - numeric_y).abs() < NUMERIC * 5.0, "df/dy {gy} vs {numeric_y}");
+    assert!(
+        (gx - numeric_x).abs() < NUMERIC * 5.0,
+        "df/dx {gx} vs {numeric_x}"
+    );
+    assert!(
+        (gy - numeric_y).abs() < NUMERIC * 5.0,
+        "df/dy {gy} vs {numeric_y}"
+    );
 }
 
 #[test]
@@ -119,18 +126,12 @@ fn tensor_gradients_match_finite_differences_elementwise() {
     let tape = Tape::new();
     let guard = Variable::with_tape(&tape);
     let a = Variable::auto_tensor(Tensor::from_vec(values.clone(), shape).unwrap(), "a");
-    let f = a
-        .exp()
-        .mul(&a.sin())
-        .mul(&a)
-        .sum();
+    let f = a.exp().mul(&a.sin()).mul(&a).sum();
     f.backward();
     let gradient = a.grad().to_vec();
     drop(guard);
 
-    let scalar = |data: &[f64]| -> f64 {
-        data.iter().map(|&v| v.exp() * v.sin() * v).sum()
-    };
+    let scalar = |data: &[f64]| -> f64 { data.iter().map(|&v| v.exp() * v.sin() * v).sum() };
     let mut numeric = vec![0.0; values.len()];
     for index in 0..values.len() {
         let h = NUMERIC.cbrt() * values[index].abs().max(1.0);

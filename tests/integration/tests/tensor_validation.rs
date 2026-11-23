@@ -105,7 +105,12 @@ fn transposed_and_broadcast_operands_agree_with_materialised_versions() {
     assert!((view.sum() - base.sum()).abs() < 1e-12);
     let axis0_view = view.sum_axis(0).unwrap().to_vec();
     let axis0_dense = view.to_contiguous().sum_axis(0).unwrap().to_vec();
-    assert_close(&axis0_view, &axis0_dense, 1e-12, "axis-0 reduction of a view");
+    assert_close(
+        &axis0_view,
+        &axis0_dense,
+        1e-12,
+        "axis-0 reduction of a view",
+    );
 }
 
 #[test]
@@ -212,7 +217,14 @@ fn elementwise_ops_are_bit_stable_across_layouts() {
 fn edge_shapes_are_handled() {
     // 0-d tensors.
     let scalar = Tensor::scalar(2.5);
-    assert_eq!(scalar.add(&Tensor::scalar(1.5)).unwrap().scalar_value().unwrap(), 4.0);
+    assert_eq!(
+        scalar
+            .add(&Tensor::scalar(1.5))
+            .unwrap()
+            .scalar_value()
+            .unwrap(),
+        4.0
+    );
     // Empty tensors.
     let empty = Tensor::zeros([0, 4]);
     assert_eq!(empty.add(&Tensor::ones([0, 4])).unwrap().len(), 0);
