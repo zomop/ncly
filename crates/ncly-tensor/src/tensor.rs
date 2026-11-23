@@ -127,7 +127,10 @@ impl Tensor {
     /// with a floating point step.
     pub fn arange(start: f64, stop: f64, step: f64) -> Result<Self> {
         if step == 0.0 || !step.is_finite() {
-            return Err(NclyError::invalid_shape("arange", "step must be finite and non-zero"));
+            return Err(NclyError::invalid_shape(
+                "arange",
+                "step must be finite and non-zero",
+            ));
         }
         let count = ((stop - start) / step).ceil();
         if count < 0.0 {
@@ -419,7 +422,11 @@ impl Tensor {
         }
         Ok(Self {
             storage: Arc::clone(&self.storage),
-            layout: Layout::new(Shape::new(dims), Strides::new(strides), self.layout.offset()),
+            layout: Layout::new(
+                Shape::new(dims),
+                Strides::new(strides),
+                self.layout.offset(),
+            ),
         })
     }
 
@@ -461,18 +468,32 @@ impl Tensor {
         let mut dims = self.shape().dims().to_vec();
         let mut strides = self.strides().as_slice().to_vec();
         // A length-1 axis can use any stride; zero keeps it broadcast-safe.
-        let stride = if axis < strides.len() { strides[axis] * dims[axis] as isize } else { 1 };
+        let stride = if axis < strides.len() {
+            strides[axis] * dims[axis] as isize
+        } else {
+            1
+        };
         dims.insert(axis, 1);
         strides.insert(axis, stride);
         Ok(Self {
             storage: Arc::clone(&self.storage),
-            layout: Layout::new(Shape::new(dims), Strides::new(strides), self.layout.offset()),
+            layout: Layout::new(
+                Shape::new(dims),
+                Strides::new(strides),
+                self.layout.offset(),
+            ),
         })
     }
 
     /// Remove all axes of length 1 without copying.
     pub fn squeeze(&self) -> Tensor {
-        let dims: Vec<usize> = self.shape().dims().iter().copied().filter(|&d| d != 1).collect();
+        let dims: Vec<usize> = self
+            .shape()
+            .dims()
+            .iter()
+            .copied()
+            .filter(|&d| d != 1)
+            .collect();
         let strides: Vec<isize> = self
             .shape()
             .dims()
@@ -483,7 +504,11 @@ impl Tensor {
             .collect();
         Self {
             storage: Arc::clone(&self.storage),
-            layout: Layout::new(Shape::new(dims), Strides::new(strides), self.layout.offset()),
+            layout: Layout::new(
+                Shape::new(dims),
+                Strides::new(strides),
+                self.layout.offset(),
+            ),
         }
     }
 
@@ -621,7 +646,11 @@ mod tests {
         let a = Tensor::uniform([100], 42);
         let b = Tensor::uniform([100], 42);
         assert_eq!(a, b);
-        assert!(a.as_slice().unwrap().iter().all(|&v| (0.0..1.0).contains(&v)));
+        assert!(a
+            .as_slice()
+            .unwrap()
+            .iter()
+            .all(|&v| (0.0..1.0).contains(&v)));
         let c = Tensor::uniform([100], 43);
         assert_ne!(a, c);
     }

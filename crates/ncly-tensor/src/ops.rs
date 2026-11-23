@@ -351,7 +351,9 @@ pub(crate) fn reduce_axis(
 
     // Normalise to a contiguous buffer so the strided inner loop stays simple.
     let dense = input.to_contiguous();
-    let data = dense.as_slice().expect("to_contiguous returns contiguous data");
+    let data = dense
+        .as_slice()
+        .expect("to_contiguous returns contiguous data");
 
     for o in 0..outer {
         for i in 0..inner {
@@ -495,20 +497,14 @@ impl Tensor {
     pub fn muls(&self, scalar: f64) -> Tensor {
         let mut out = Vec::with_capacity(self.len());
         self.for_each_flat(|flat| out.push(self.storage[flat] * scalar));
-        Tensor::from_parts(
-            Arc::new(out),
-            Layout::contiguous(self.shape().clone()),
-        )
+        Tensor::from_parts(Arc::new(out), Layout::contiguous(self.shape().clone()))
     }
 
     /// Add a scalar to every element.
     pub fn adds(&self, scalar: f64) -> Tensor {
         let mut out = Vec::with_capacity(self.len());
         self.for_each_flat(|flat| out.push(self.storage[flat] + scalar));
-        Tensor::from_parts(
-            Arc::new(out),
-            Layout::contiguous(self.shape().clone()),
-        )
+        Tensor::from_parts(Arc::new(out), Layout::contiguous(self.shape().clone()))
     }
 
     /// Apply a unary operation element-wise.
@@ -655,7 +651,9 @@ impl Tensor {
     /// for a contiguous tensor this short-circuits on the first non-zero.
     pub fn is_zero(&self) -> bool {
         if self.is_contiguous() {
-            return self.as_slice().is_some_and(|data| data.iter().all(|&v| v == 0.0));
+            return self
+                .as_slice()
+                .is_some_and(|data| data.iter().all(|&v| v == 0.0));
         }
         let mut zero = true;
         self.for_each_flat(|flat| {
@@ -747,7 +745,10 @@ impl Tensor {
     /// Kronecker product of two 2-d tensors.
     pub fn kron(&self, other: &Tensor) -> Result<Tensor> {
         if self.rank() != 2 || other.rank() != 2 {
-            return Err(NclyError::invalid_shape("kron", "both operands must be 2-d"));
+            return Err(NclyError::invalid_shape(
+                "kron",
+                "both operands must be 2-d",
+            ));
         }
         let (m, n) = (self.shape().dims()[0], self.shape().dims()[1]);
         let (p, q) = (other.shape().dims()[0], other.shape().dims()[1]);

@@ -127,7 +127,12 @@ impl Tape {
     }
 
     /// Record an operation and return the new node index.
-    pub fn record(&self, op: &'static str, data: Tensor, parents: Vec<(usize, LocalGrad)>) -> usize {
+    pub fn record(
+        &self,
+        op: &'static str,
+        data: Tensor,
+        parents: Vec<(usize, LocalGrad)>,
+    ) -> usize {
         let mut nodes = self.lock();
         let index = nodes.len();
         // Parents must already exist; a violation would make the reverse sweep
@@ -254,7 +259,11 @@ fn permute_axes(value: &Tensor, order: &[usize]) -> Tensor {
     }
     Tensor::from_parts(
         Arc::clone(value.storage()),
-        Layout::new(Shape::new(dims), Strides::new(strides), value.layout().offset()),
+        Layout::new(
+            Shape::new(dims),
+            Strides::new(strides),
+            value.layout().offset(),
+        ),
     )
     .to_contiguous()
 }
@@ -456,7 +465,14 @@ impl Variable {
             .expect("broadcast failed in add");
         let left = Tensor::ones(self.value().shape().dims().to_vec());
         let right = Tensor::ones(rhs.value().shape().dims().to_vec());
-        self.record("add", data, vec![(self.index, LocalGrad::Elementwise(left)), (rhs.index, LocalGrad::Elementwise(right))])
+        self.record(
+            "add",
+            data,
+            vec![
+                (self.index, LocalGrad::Elementwise(left)),
+                (rhs.index, LocalGrad::Elementwise(right)),
+            ],
+        )
     }
 
     /// Element-wise subtraction (with broadcasting).
@@ -467,7 +483,14 @@ impl Variable {
             .expect("broadcast failed in sub");
         let left = Tensor::ones(self.value().shape().dims().to_vec());
         let right = Tensor::ones(rhs.value().shape().dims().to_vec()).neg();
-        self.record("sub", data, vec![(self.index, LocalGrad::Elementwise(left)), (rhs.index, LocalGrad::Elementwise(right))])
+        self.record(
+            "sub",
+            data,
+            vec![
+                (self.index, LocalGrad::Elementwise(left)),
+                (rhs.index, LocalGrad::Elementwise(right)),
+            ],
+        )
     }
 
     /// Element-wise product (with broadcasting).
@@ -478,7 +501,10 @@ impl Variable {
         self.record(
             "mul",
             data,
-            vec![(self.index, LocalGrad::Elementwise(b)), (rhs.index, LocalGrad::Elementwise(a))],
+            vec![
+                (self.index, LocalGrad::Elementwise(b)),
+                (rhs.index, LocalGrad::Elementwise(a)),
+            ],
         )
     }
 
@@ -503,7 +529,11 @@ impl Variable {
     pub fn exp(&self) -> Variable {
         let data = self.value().exp();
         let local = data.clone();
-        self.record("exp", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "exp",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `ln(x)`.
@@ -511,35 +541,55 @@ impl Variable {
         let value = self.value();
         let data = value.ln();
         let local = value.unary(ncly_tensor::UnaryOp::Recip);
-        self.record("ln", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "ln",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `sqrt(x)`.
     pub fn sqrt(&self) -> Variable {
         let data = self.value().sqrt();
         let local = data.muls(2.0).unary(ncly_tensor::UnaryOp::Recip);
-        self.record("sqrt", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "sqrt",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `sin(x)`.
     pub fn sin(&self) -> Variable {
         let data = self.value().sin();
         let local = self.value().cos();
-        self.record("sin", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "sin",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `cos(x)`.
     pub fn cos(&self) -> Variable {
         let data = self.value().cos();
         let local = self.value().sin().neg();
-        self.record("cos", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "cos",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `tanh(x)`.
     pub fn tanh(&self) -> Variable {
         let data = self.value().tanh();
         let local = data.mul(&data).expect("square").neg().adds(1.0);
-        self.record("tanh", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "tanh",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `x^n`.
@@ -547,7 +597,11 @@ impl Variable {
         let value = self.value();
         let data = value.powf(n as f64);
         let local = value.powf((n - 1) as f64).muls(n as f64);
-        self.record("powi", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "powi",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `x^p` for real `p`.
@@ -555,7 +609,11 @@ impl Variable {
         let value = self.value();
         let data = value.powf(p);
         let local = value.powf(p - 1.0).muls(p);
-        self.record("powf", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "powf",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `|x|`.
@@ -572,7 +630,11 @@ impl Variable {
                 0.0
             }
         });
-        self.record("abs", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "abs",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// `1/x`.
@@ -589,14 +651,22 @@ impl Variable {
     pub fn neg(&self) -> Variable {
         let data = self.value().neg();
         let local = Tensor::full(self.value().shape().dims().to_vec(), -1.0);
-        self.record("neg", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "neg",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// Multiply by a constant.
     pub fn scale(&self, scalar: f64) -> Variable {
         let data = self.value().muls(scalar);
         let local = Tensor::full(self.value().shape().dims().to_vec(), scalar);
-        self.record("scale", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "scale",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// Sum over every axis, producing a 0-d variable.
@@ -605,7 +675,11 @@ impl Variable {
         let total = value.sum();
         let data = Tensor::scalar(total);
         let local = Tensor::ones(value.shape().dims().to_vec());
-        self.record("sum", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "sum",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// Sum one axis (removed from the result).
@@ -613,7 +687,11 @@ impl Variable {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
         let data = value.sum_axis(axis)?;
-        Ok(self.record("sum_axis", data, vec![(self.index, LocalGrad::Elementwise(local))]))
+        Ok(self.record(
+            "sum_axis",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        ))
     }
 
     /// Sum several axes, keeping the listed ones.
@@ -621,7 +699,11 @@ impl Variable {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
         let data = value.sum_axes(axes)?;
-        Ok(self.record("sum_axes", data, vec![(self.index, LocalGrad::Elementwise(local))]))
+        Ok(self.record(
+            "sum_axes",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        ))
     }
 
     /// Mean over every axis.
@@ -630,18 +712,24 @@ impl Variable {
         let count = value.len();
         let data = Tensor::scalar(value.mean());
         let local = Tensor::full(value.shape().dims().to_vec(), 1.0 / count as f64);
-        self.record("mean", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "mean",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// Reshape.
     pub fn reshape(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target: Vec<usize> = shape.into();
-        let data = value
-            .to_contiguous()
-            .reshape(target.clone())?;
+        let data = value.to_contiguous().reshape(target.clone())?;
         let local = Tensor::ones(value.shape().dims().to_vec());
-        Ok(self.record("reshape", data, vec![(self.index, LocalGrad::Elementwise(local))]))
+        Ok(self.record(
+            "reshape",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        ))
     }
 
     /// Transpose (reverses axes).
@@ -654,7 +742,11 @@ impl Variable {
                 reason: "transpose changed the element count".into(),
             });
         }
-        Ok(self.record("transpose", data, vec![(self.index, LocalGrad::Elementwise(local))]))
+        Ok(self.record(
+            "transpose",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        ))
     }
 
     /// Broadcast to a larger shape.
@@ -667,7 +759,11 @@ impl Variable {
         let target = Shape::new(shape.into());
         let data = value.broadcast_to(target.dims().to_vec())?.to_contiguous();
         let local = Tensor::ones(target.dims().to_vec());
-        Ok(self.record("broadcast_to", data, vec![(self.index, LocalGrad::Elementwise(local))]))
+        Ok(self.record(
+            "broadcast_to",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        ))
     }
 
     /// Matrix product of two 2-d variables.
@@ -696,7 +792,11 @@ impl Variable {
         let local = value.adds(-shift).exp();
         let total: f64 = local.sum();
         let local = local.muls(1.0 / total);
-        self.record("logsumexp", data, vec![(self.index, LocalGrad::Elementwise(local))])
+        self.record(
+            "logsumexp",
+            data,
+            vec![(self.index, LocalGrad::Elementwise(local))],
+        )
     }
 
     /// Materialise the primal value.
@@ -869,7 +969,10 @@ mod tests {
     fn mean_gradient_is_one_over_n() {
         let tape = Tape::new();
         let _guard = Variable::with_tape(&tape);
-        let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [4]).unwrap(), "x");
+        let x = Variable::auto_tensor(
+            Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [4]).unwrap(),
+            "x",
+        );
         x.mean().backward();
         assert_eq!(x.grad().to_vec(), vec![0.25; 4]);
     }
@@ -878,8 +981,14 @@ mod tests {
     fn matmul_gradient() {
         let tape = Tape::new();
         let _guard = Variable::with_tape(&tape);
-        let a = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [2, 2]).unwrap(), "a");
-        let b = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 0.0, 0.0, 1.0], [2, 2]).unwrap(), "b");
+        let a = Variable::auto_tensor(
+            Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], [2, 2]).unwrap(),
+            "a",
+        );
+        let b = Variable::auto_tensor(
+            Tensor::from_vec(vec![1.0, 0.0, 0.0, 1.0], [2, 2]).unwrap(),
+            "b",
+        );
         let c = a.matmul(&b).unwrap().sum();
         c.backward();
         // d/dA sum(A·I) = ones(2,2) ; d/dB = ones(2,2)

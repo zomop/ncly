@@ -1,8 +1,8 @@
 //! Linear system solvers and least squares.
 
+use crate::check_dims;
 use crate::lu::Lu;
 use crate::qr::Qr;
-use crate::check_dims;
 use ncly_core::Result;
 
 /// Solve `A·x = b` for a dense `n × n` row-major `A`.

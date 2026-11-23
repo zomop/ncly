@@ -58,7 +58,10 @@ pub(crate) fn check_dims(op: &'static str, data: &[f64], rows: usize, cols: usiz
     if data.len() != expected {
         return Err(NclyError::invalid_shape(
             op,
-            format!("expected {expected} elements for {rows}x{cols}, got {}", data.len()),
+            format!(
+                "expected {expected} elements for {rows}x{cols}, got {}",
+                data.len()
+            ),
         ));
     }
     Ok(())

@@ -75,12 +75,13 @@ impl Shape {
 
     /// Length of `axis`.
     pub fn dim(&self, axis: usize) -> Result<usize> {
-        self.dims.get(axis).copied().ok_or(NclyError::Axis(
-            AxisError::AxisOutOfBounds {
+        self.dims
+            .get(axis)
+            .copied()
+            .ok_or(NclyError::Axis(AxisError::AxisOutOfBounds {
                 axis,
                 rank: self.rank(),
-            },
-        ))
+            }))
     }
 
     /// Canonical row-major strides for this shape.
@@ -605,7 +606,10 @@ mod tests {
     #[test]
     fn reshape_infers_axis() {
         let shape = Shape::new([2, 3, 4]);
-        assert_eq!(shape.reshape_to([usize::MAX, 4]).unwrap(), Shape::new([6, 4]));
+        assert_eq!(
+            shape.reshape_to([usize::MAX, 4]).unwrap(),
+            Shape::new([6, 4])
+        );
     }
 
     #[test]

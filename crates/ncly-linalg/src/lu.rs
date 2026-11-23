@@ -71,10 +71,7 @@ impl Lu {
                 }
             }
             if is_negligible(best_value, scale, tolerance) {
-                return Err(NclyError::Singular {
-                    op: "lu",
-                    pivot: k,
-                });
+                return Err(NclyError::Singular { op: "lu", pivot: k });
             }
             if best != k {
                 for j in 0..n {
@@ -297,7 +294,9 @@ mod tests {
     fn factors_reconstruct_the_matrix() {
         for n in 1..8 {
             let a: Vec<f64> = (0..n * n)
-                .map(|i| ((i * 7 + 3) % 11) as f64 - 4.0 + if i % (n + 1) == 0 { 10.0 } else { 0.0 })
+                .map(|i| {
+                    ((i * 7 + 3) % 11) as f64 - 4.0 + if i % (n + 1) == 0 { 10.0 } else { 0.0 }
+                })
                 .collect();
             let lu = Lu::factor(&a, n).unwrap();
             let lu_product = multiply(&lu.lower(), &lu.upper(), n);

@@ -79,14 +79,20 @@ pub fn matmul(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
             if a[0] != b[0] {
                 return Err(NclyError::shape_mismatch(
                     "matmul",
-                    format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+                    format!(
+                        "({}, {}, {}) x ({}, {}, {})",
+                        a[0], a[1], a[2], b[0], b[1], b[2]
+                    ),
                     "batch dimensions differ",
                 ));
             }
             if a[2] != b[1] {
                 return Err(NclyError::shape_mismatch(
                     "matmul",
-                    format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+                    format!(
+                        "({}, {}, {}) x ({}, {}, {})",
+                        a[0], a[1], a[2], b[0], b[1], b[2]
+                    ),
                     format!("inner dimensions {} and {} differ", a[2], b[1]),
                 ));
             }
@@ -225,7 +231,14 @@ mod tests {
 
     #[test]
     fn matmul_matches_naive_for_many_shapes() {
-        for (m, k, n) in [(1, 1, 1), (2, 3, 4), (5, 1, 7), (8, 8, 8), (17, 33, 9), (64, 64, 64)] {
+        for (m, k, n) in [
+            (1, 1, 1),
+            (2, 3, 4),
+            (5, 1, 7),
+            (8, 8, 8),
+            (17, 33, 9),
+            (64, 64, 64),
+        ] {
             let a: Vec<f64> = (0..m * k).map(|i| ((i * 37 % 11) as f64) - 5.0).collect();
             let b: Vec<f64> = (0..k * n).map(|i| ((i * 53 % 13) as f64) - 6.0).collect();
             let mut out = vec![0.0; m * n];
@@ -244,9 +257,15 @@ mod tests {
     fn identity_is_neutral() {
         let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]).unwrap();
         let eye = Tensor::eye(3);
-        assert_eq!(a.matmul(&eye).unwrap().to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(
+            a.matmul(&eye).unwrap().to_vec(),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        );
         let eye2 = Tensor::eye(2);
-        assert_eq!(eye2.matmul(&a).unwrap().to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(
+            eye2.matmul(&a).unwrap().to_vec(),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        );
     }
 
     #[test]
@@ -259,11 +278,8 @@ mod tests {
 
     #[test]
     fn batched_matmul() {
-        let a = Tensor::from_vec(
-            (0..2 * 2 * 2).map(f64::from).collect::<Vec<_>>(),
-            [2, 2, 2],
-        )
-        .unwrap();
+        let a =
+            Tensor::from_vec((0..2 * 2 * 2).map(f64::from).collect::<Vec<_>>(), [2, 2, 2]).unwrap();
         let b = Tensor::eye(2);
         let out = a.matmul(&b).unwrap();
         assert_eq!(out.shape().dims(), &[2, 2, 2]);

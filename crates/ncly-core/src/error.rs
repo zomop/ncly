@@ -37,14 +37,20 @@ impl fmt::Display for AxisError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AxisOutOfBounds { axis, rank } => {
-                write!(f, "axis {axis} is out of bounds for a {rank}-dimensional value")
+                write!(
+                    f,
+                    "axis {axis} is out of bounds for a {rank}-dimensional value"
+                )
             }
             Self::IncompatibleLength { axis, lhs, rhs } => write!(
                 f,
                 "cannot broadcast axis {axis}: length {lhs} is incompatible with length {rhs}"
             ),
             Self::RankOverflow { max_rank } => {
-                write!(f, "resulting rank exceeds the supported maximum of {max_rank}")
+                write!(
+                    f,
+                    "resulting rank exceeds the supported maximum of {max_rank}"
+                )
             }
         }
     }
@@ -171,7 +177,11 @@ pub type Result<T, E = NclyError> = core::result::Result<T, E>;
 
 impl NclyError {
     /// Build a [`NclyError::ShapeMismatch`].
-    pub fn shape_mismatch(op: &'static str, expected: impl Into<String>, found: impl Into<String>) -> Self {
+    pub fn shape_mismatch(
+        op: &'static str,
+        expected: impl Into<String>,
+        found: impl Into<String>,
+    ) -> Self {
         Self::ShapeMismatch {
             op,
             expected: expected.into(),

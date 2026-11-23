@@ -235,7 +235,10 @@ mod tests {
     use super::*;
 
     fn max_diff(a: &[f64], b: &[f64]) -> f64 {
-        a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max)
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f64::max)
     }
 
     #[test]
@@ -265,7 +268,9 @@ mod tests {
     #[test]
     fn q_is_orthonormal() {
         let (m, n) = (7, 4);
-        let a: Vec<f64> = (0..m * n).map(|i| ((i * 7 + 1) % 17) as f64 - 8.0).collect();
+        let a: Vec<f64> = (0..m * n)
+            .map(|i| ((i * 7 + 1) % 17) as f64 - 8.0)
+            .collect();
         let qr = Qr::factor(&a, m, n).unwrap();
         let q = qr.q();
         for i in 0..n {

@@ -332,11 +332,7 @@ impl CsrMatrix {
         }
 
         Ok(CsrMatrix::from_parts_unchecked(
-            self.rows,
-            other.cols,
-            row_ptr,
-            col_idx,
-            values,
+            self.rows, other.cols, row_ptr, col_idx, values,
         ))
     }
 
@@ -393,8 +389,16 @@ impl CsrMatrix {
             let (mut i, i_end) = (self.row_ptr[row], self.row_ptr[row + 1]);
             let (mut j, j_end) = (other.row_ptr[row], other.row_ptr[row + 1]);
             while i < i_end || j < j_end {
-                let left_col = if i < i_end { self.col_idx[i] } else { usize::MAX };
-                let right_col = if j < j_end { other.col_idx[j] } else { usize::MAX };
+                let left_col = if i < i_end {
+                    self.col_idx[i]
+                } else {
+                    usize::MAX
+                };
+                let right_col = if j < j_end {
+                    other.col_idx[j]
+                } else {
+                    usize::MAX
+                };
                 let (column, value) = match left_col.cmp(&right_col) {
                     core::cmp::Ordering::Less => {
                         let value = self.values[i];
@@ -421,11 +425,7 @@ impl CsrMatrix {
             row_ptr.push(col_idx.len());
         }
         Ok(CsrMatrix::from_parts_unchecked(
-            self.rows,
-            self.cols,
-            row_ptr,
-            col_idx,
-            values,
+            self.rows, self.cols, row_ptr, col_idx, values,
         ))
     }
 
@@ -562,14 +562,8 @@ mod tests {
 
     #[test]
     fn triplets_are_sorted_and_summed() {
-        let a = CsrMatrix::from_triplets(
-            2,
-            3,
-            &[0, 0, 0, 1],
-            &[2, 0, 2, 1],
-            &[1.0, 5.0, 2.0, 7.0],
-        )
-        .unwrap();
+        let a = CsrMatrix::from_triplets(2, 3, &[0, 0, 0, 1], &[2, 0, 2, 1], &[1.0, 5.0, 2.0, 7.0])
+            .unwrap();
         assert_eq!(a.col_idx(), &[0, 2, 1]);
         assert_eq!(a.values(), &[5.0, 3.0, 7.0]);
     }
@@ -602,7 +596,8 @@ mod tests {
     #[test]
     fn spmm_matches_dense_product() {
         let a = sample();
-        let b = CsrMatrix::from_dense(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 3, 3).unwrap();
+        let b =
+            CsrMatrix::from_dense(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 3, 3).unwrap();
         let c = a.spmm(&b).unwrap();
         let dense_a = a.to_dense();
         let dense_b = b.to_dense();
