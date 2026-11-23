@@ -45,10 +45,13 @@ pub use cholesky::Cholesky;
 pub use eigen::{eigenvalues, Eigen};
 pub use lu::Lu;
 pub use matrix::Matrix;
+pub use lib_norm::matrix_norm_inf;
 pub use qr::Qr;
-pub use solve::{inverse, lstsq, solve};
+pub use solve::{inverse, lstsq, residual, solve};
 
 use ncly_core::{NclyError, Result};
+
+mod lib_norm;
 
 /// Validate that `data` can describe an `rows × cols` matrix.
 pub(crate) fn check_dims(op: &'static str, data: &[f64], rows: usize, cols: usize) -> Result<()> {
@@ -67,14 +70,3 @@ pub(crate) fn check_dims(op: &'static str, data: &[f64], rows: usize, cols: usiz
     Ok(())
 }
 
-/// The `inf`-norm of a matrix, used as the scale for pivot tests.
-pub(crate) fn matrix_norm_inf(data: &[f64], n: usize) -> f64 {
-    let mut best = 0.0f64;
-    for row in data.chunks(n) {
-        let total: f64 = row.iter().map(|v| v.abs()).sum();
-        if total > best {
-            best = total;
-        }
-    }
-    best
-}

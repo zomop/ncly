@@ -1,0 +1,27 @@
+[package]
+name = "ncly-python"
+description = "Python bindings for NCLY (PyO3 module `ncly`)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+publish = false
+
+[lib]
+name = "ncly"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
+ncly-autodiff = { workspace = true }
+ncly-linalg = { workspace = true }
+ncly-sparse = { workspace = true }
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py38"] }
+
+[lints]
+workspace = true
