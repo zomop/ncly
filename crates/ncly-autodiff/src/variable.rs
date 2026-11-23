@@ -1024,10 +1024,7 @@ mod tests {
         assert_eq!(a.grad().to_vec(), vec![1.0, 0.0, 0.0, 1.0]);
         assert_eq!(b.grad().to_vec(), vec![1.0, 3.0, 2.0, 4.0]);
         // Sanity: the count of ones in dA equals the count in B.
-        assert_eq!(
-            a.grad().to_vec().iter().filter(|&&v| v == 1.0).count(),
-            2
-        );
+        assert_eq!(a.grad().to_vec().iter().filter(|&&v| v == 1.0).count(), 2);
     }
 
     #[test]
