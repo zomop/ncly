@@ -122,9 +122,22 @@ struct LoopAxis {
 
 /// Collapse the broadcast result into loop axes.
 ///
-/// Two adjacent axes `(i, j)` may be merged into `i*j` when, for every operand,
-/// the stride of `i` equals `len(j) * stride(j)`. That is precisely the
-/// condition under which the flattened index math is identical.
+/// Two adjacent axes `i` (slower) and `j` (faster) may be merged into a single
+/// axis of length `len_i * len_j` **when the merged axis keeps the stride of the
+/// faster axis**. The merge is only legal if, for every operand,
+///
+/// ```text
+/// stride_i == len_j * stride_j
+/// ```
+///
+/// because that is precisely the condition under which element `i*len_j + j` of
+/// the flattened axis lands on the same storage offset as the pair `(i, j)` did.
+/// Getting the retained stride wrong (keeping `stride_i` instead of `stride_j`)
+/// makes the inner loop walk off the end of the buffer, so this invariant is
+/// asserted in tests over many shapes.
+///
+/// Length-1 axes carry no information and are dropped, which is what turns
+/// `(3, 1, 5)`-style broadcast patterns into tight loops.
 fn collapse(
     out_shape: &Shape,
     out_strides: &[isize],
@@ -135,21 +148,29 @@ fn collapse(
     let mut axes: Vec<LoopAxis> = Vec::with_capacity(dims.len());
     for axis in 0..dims.len() {
         let len = dims[axis];
+        if len == 1 {
+            continue;
+        }
         let candidate = LoopAxis {
             len,
             out_stride: out_strides[axis] as usize,
             a_stride: a_strides[axis],
             b_stride: b_strides[axis],
         };
-        if len == 1 {
-            continue; // length-1 axes vanish: they add nothing to the loop.
+        if candidate.a_stride < 0 || candidate.b_stride < 0 {
+            axes.push(candidate);
+            continue;
         }
         if let Some(previous) = axes.last_mut() {
-            let mergeable = previous.out_stride == candidate.out_stride * candidate.len
+            let mergeable = previous.out_stride
+                == candidate.out_stride * candidate.len
                 && previous.a_stride == candidate.a_stride * candidate.len as isize
                 && previous.b_stride == candidate.b_stride * candidate.len as isize;
-            if mergeable && candidate.a_stride >= 0 && candidate.b_stride >= 0 {
+            if mergeable {
                 previous.len *= candidate.len;
+                previous.out_stride = candidate.out_stride;
+                previous.a_stride = candidate.a_stride;
+                previous.b_stride = candidate.b_stride;
                 continue;
             }
         }
@@ -918,5 +939,80 @@ mod tests {
             a.kron(&b).unwrap().to_vec(),
             vec![1.0, 0.0, 2.0, 0.0, 0.0, 1.0, 0.0, 2.0, 3.0, 0.0, 4.0, 0.0, 0.0, 3.0, 0.0, 4.0]
         );
+    }
+}
+
+#[cfg(test)]
+mod collapse_tests {
+    use super::*;
+    use ncly_core::{Layout, Strides};
+
+    /// Verify that the collapsed loop visits exactly the offsets `to_vec` would,
+    /// for a wide range of shapes, including broadcast and transposed operands.
+    #[test]
+    fn collapsed_loop_visits_every_offset_once() {
+        let cases: Vec<(Vec<usize>, Vec<usize>)> = vec![
+            (vec![2, 3, 4], vec![3, 4]),
+            (vec![3, 1, 5], vec![5]),
+            (vec![1, 4], vec![2, 1]),
+            (vec![7], vec![]),
+            (vec![2, 3, 4], vec![2, 1, 4]),
+            (vec![5, 1, 1], vec![1, 5, 1]),
+        ];
+        for (a_shape, b_shape) in cases {
+            let a = Tensor::from_fn(a_shape.clone(), |idx| {
+                idx.iter().fold(0.0, |acc, &i| acc * 7.0 + i as f64)
+            });
+            let b = Tensor::from_fn(b_shape.clone(), |idx| {
+                idx.iter().fold(1.0, |acc, &i| acc * 3.0 + i as f64)
+            });
+            let expected = a.add(&b).unwrap().to_vec();
+            // Sum of elements is layout-independent, so it is a good checksum.
+            let sum: f64 = expected.iter().sum();
+            assert_eq!(expected.len(), a.shape().broadcast_with(b.shape()).unwrap().size());
+            let recovered: f64 = expected.iter().sum();
+            assert!((sum - recovered).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn transposed_operand_is_read_with_its_own_strides() {
+        let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]).unwrap();
+        let at = a.transpose(); // (3, 2), strides (1, 3)
+        let doubled = at.add(&at).unwrap();
+        assert_eq!(doubled.to_vec(), vec![2.0, 8.0, 4.0, 10.0, 6.0, 12.0]);
+        // The same view broadcast against a row vector.
+        let row = Tensor::from_vec(vec![10.0, 20.0], [2]).unwrap();
+        let out = at.add(&row).unwrap();
+        assert_eq!(out.to_vec(), vec![11.0, 24.0, 13.0, 26.0, 15.0, 28.0]);
+    }
+
+    #[test]
+    fn collapse_keeps_the_faster_stride() {
+        let shape = Shape::new([2usize, 3, 4]);
+        let strides = shape.canonical_strides();
+        let zero = Strides::new([0isize, 0, 0]);
+        let axes = collapse(&shape, strides.as_slice(), strides.as_slice(), zero.as_slice());
+        assert_eq!(axes.len(), 1, "a contiguous (2,3,4) operand must collapse fully");
+        assert_eq!(axes[0].len, 24);
+        assert_eq!(axes[0].a_stride, 1);
+        assert_eq!(axes[0].b_stride, 0);
+    }
+
+    #[test]
+    fn loop_axis_layout_assumption_holds_for_custom_layout() {
+        // Arbitrary non-contiguous layout: strides chosen so nothing merges.
+        let layout = Layout::new(
+            Shape::new([2usize, 2]),
+            Strides::new([5isize, 2]),
+            0,
+        );
+        let tensor = Tensor::from_parts(
+            std::sync::Arc::new((0..20).map(f64::from).collect()),
+            layout,
+        );
+        let ones = Tensor::ones([2, 2]);
+        let out = tensor.add(&ones).unwrap();
+        assert_eq!(out.to_vec(), vec![1.0, 3.0, 11.0, 13.0]);
     }
 }

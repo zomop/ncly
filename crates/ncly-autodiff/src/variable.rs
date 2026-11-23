@@ -183,6 +183,14 @@ impl Tape {
                 reason: format!("backward called on unknown node {index}"),
             });
         }
+        // PyTorch semantics: `.grad` accumulates on leaves across calls, while
+        // intermediates start each sweep from zero. Without the reset, running
+        // backward twice would double-count shared subexpressions.
+        for node in nodes.iter_mut() {
+            if !node.is_leaf {
+                node.adjoint = Tensor::zeros(node.data.shape().dims().to_vec());
+            }
+        }
         let shape = nodes[index].data.shape().clone();
         nodes[index].adjoint = Tensor::ones(shape.dims().to_vec());
 
