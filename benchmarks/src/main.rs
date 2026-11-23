@@ -55,8 +55,12 @@ impl Measurement {
 }
 
 /// Run `f` repeatedly and record the median and best durations.
-fn measure<F: FnMut() -> R>(name: &'static str, size: String, iterations: usize, mut f: F)
-    -> Measurement
+fn measure<F: FnMut() -> R>(
+    name: &'static str,
+    size: String,
+    iterations: usize,
+    mut f: F,
+) -> Measurement
 where
     R: Sized,
 {
@@ -160,8 +164,10 @@ fn benchmark_elementwise_add() -> Measurement {
     let n = 1 << 20;
     let a = Tensor::uniform([n], 1);
     let b = Tensor::uniform([n], 2);
-    measure("tensor add (1-d)", format!("n=2^20"), 50, || a.add(&b).map(|t| t.sum()))
-        .pipe(|m| with_bytes(with_flops(m, n as f64), 3 * n * 8))
+    measure("tensor add (1-d)", format!("n=2^20"), 50, || {
+        a.add(&b).map(|t| t.sum())
+    })
+    .pipe(|m| with_bytes(with_flops(m, n as f64), 3 * n * 8))
 }
 
 fn benchmark_exp() -> Measurement {
@@ -245,9 +251,12 @@ fn benchmark_spmv() -> Measurement {
     // 2 flops per stored entry.
     let flops = 2.0 * nnz as f64;
     let bytes = nnz * (8 + 8) + n * 8 * 2;
-    measure("spmv (1-d Laplacian)", format!("n={n}, nnz={nnz}"), 50, || {
-        matrix.spmv(&x).iter().sum::<f64>()
-    })
+    measure(
+        "spmv (1-d Laplacian)",
+        format!("n={n}, nnz={nnz}"),
+        50,
+        || matrix.spmv(&x).iter().sum::<f64>(),
+    )
     .pipe(|m| with_bytes(with_flops(m, flops), bytes))
 }
 
