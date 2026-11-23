@@ -31,14 +31,16 @@ jobs:
             echo "=== cargo doc (deny warnings) ==="
             RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps 2>&1 | grep -E "^error|^warning" | head -30
           } > /tmp/log.txt 2>&1
-          # The pipeline above runs under `set +e` so the whole log is always
-          # uploaded. The gates are therefore re-run individually: a failing
-          # build, test or doc job must fail the job, not silently pass.
+          # The diagnostic pipeline above runs under `set +e` so the whole log is
+          # always produced and uploaded. The gates are then re-run so that a
+          # failing build, test or doc job fails the job instead of passing
+          # quietly; the log is uploaded *before* they run, so a red job still
+          # leaves its output on the commit.
+          python3 .github/ci/post_log.py /tmp/log.txt
+          tail -25 /tmp/log.txt
           cargo build --workspace --all-targets --quiet || exit 1
           cargo test --workspace --quiet || exit 1
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet || exit 1
-          python3 .github/ci/post_log.py /tmp/log.txt
-          tail -25 /tmp/log.txt
   python:
     runs-on: ubuntu-latest
     env:
@@ -53,10 +55,17 @@ jobs:
             python3 --version
             python3 -m pip install --quiet --break-system-packages maturin pytest
             cd python
-            maturin build --release -o /tmp/wheels 2>&1 | tail -40
-            python3 -m pip install --quiet --break-system-packages --force-reinstall /tmp/wheels/*.whl
+            maturin build --release -o /tmp/wheels 2>&1 | tail -40 || echo "MATURIN FAILED"
+            python3 -m pip install --quiet --break-system-packages --force-reinstall /tmp/wheels/*.whl \
+              || echo "WHEEL INSTALL FAILED"
             cd ..
+            # `conftest.py` skips the suite when the extension is missing, which
+            # is convenient locally but would hide a broken build in CI.
+            python3 -c "import ncly; print('extension imported:', ncly.__name__)"
             python3 -m pytest python/tests -q 2>&1 | tail -60
           } > /tmp/pylog.txt 2>&1
           python3 .github/ci/post_log.py /tmp/pylog.txt
           tail -25 /tmp/pylog.txt
+          # Gates, run after the log is safely uploaded.
+          python3 -c "import ncly" || exit 1
+          python3 -m pytest python/tests -q || exit 1
