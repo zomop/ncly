@@ -55,7 +55,12 @@ impl Measurement {
 }
 
 /// Run `f` repeatedly and record the median and best durations.
-fn measure<R>(name: &'static str, size: String, iterations: usize, mut f: impl FnMut() -> R) -> Measurement {
+fn measure<R>(
+    name: &'static str,
+    size: String,
+    iterations: usize,
+    mut f: impl FnMut() -> R,
+) -> Measurement {
     // Warm-up: page in memory and let the branch predictors settle.
     for _ in 0..(iterations / 10).max(1) {
         black_box(f());
