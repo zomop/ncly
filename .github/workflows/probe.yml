@@ -1,0 +1,17 @@
+name: probe
+on:
+  push:
+    branches: ['arena/**']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustup toolchain list
+      - name: cache-probe
+        run: echo ok
