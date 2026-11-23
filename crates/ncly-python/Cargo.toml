@@ -12,7 +12,7 @@ documentation.workspace = true
 publish = false
 
 [lib]
-name = "ncly"
+name = "ncly_python"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

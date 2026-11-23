@@ -20,7 +20,9 @@ jobs:
             echo "=== cargo build ==="
             cargo build --workspace --all-targets 2>&1 | grep -v '^\s*Compiling' | tail -140
             echo "=== cargo test ==="
-            cargo test --workspace 2>&1 | grep -E 'FAILED|panicked|assertion|test result|^error|^---- |overflow' | head -80
+            # `--no-fail-fast` so every failing test in every crate is reported,
+            # `--nocapture` so the assertion values are visible.
+            cargo test --workspace --no-fail-fast -- --nocapture 2>&1 | grep -E -A 14 '^---- |^test result: FAILED|^error\[|panicked at' | head -200
             echo "=== cargo doc (deny warnings) ==="
             RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps 2>&1 | grep -E "^error|^warning" | head -30
           } > /tmp/log.txt 2>&1

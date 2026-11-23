@@ -39,7 +39,7 @@ def test_two_leaves_share_a_tape():
 def test_matmul_gradient():
     a = ncly.Tensor([[1.0, 2.0], [3.0, 4.0]]).requires_grad()
     b = a.constant(1.0)  # scalar on the same tape; not a matrix operand
-    assert b.tolist() == [1.0]
+    assert b.value().tolist() == [1.0]
     # d/dA sum(A · I) = ones(2, 2), checked through the mse helper instead of a
     # second matrix operand so the test uses one tape only.
     loss = (a * a).sum()
