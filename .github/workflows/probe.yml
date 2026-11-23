@@ -2,16 +2,37 @@ name: probe
 on:
   push:
     branches: ['arena/**']
+
+permissions:
+  contents: write
+
 jobs:
-  probe:
+  build:
     runs-on: ubuntu-latest
+    env:
+      LOG: /tmp/build.log
     steps:
-      - uses: actions/checkout@v4
-      - name: toolchain
-        run: rustc --version && cargo --version
-      - name: deliberate failure
+      - uses: actions/checkout@v5
+      - name: run
         run: |
-          cargo --version > /tmp/log.txt 2>&1
-          printf 'error[E0425]: cannot find value `probe_symbol` in this scope\n  --> src/lib.rs:3:5\n' >> /tmp/log.txt
-          echo "::error title=build-failure::$(tail -c 4000 /tmp/log.txt | tr '\n' '\x1e' | head -c 4000)"
-          exit 1
+          set +e
+          { rustc --version; cargo --version; } > "$LOG" 2>&1
+          cargo test --workspace --no-fail-fast >> "$LOG" 2>&1
+          status=$?
+          echo "EXIT=$status" >> "$LOG"
+          python3 - "$LOG" <<'PY'
+          import os, sys, json, urllib.request
+          log = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+          tok = os.environ['GITHUB_TOKEN']; sha = os.environ['GITHUB_SHA']
+          repo = os.environ['GITHUB_REPOSITORY']
+          url = f'https://api.github.com/repos/{repo}/commits/{sha}/comments'
+          step = 55000
+          for i in range(0, max(len(log), 1), step):
+              body = json.dumps({'body': f'```\n{log[i:i+step]}\n```'}).encode()
+              req = urllib.request.Request(url, data=body, method='POST',
+                  headers={'Authorization': f'Bearer {tok}', 'Accept': 'application/vnd.github+json',
+                           'Content-Type': 'application/json'})
+              urllib.request.urlopen(req).read()
+          print('posted', len(log), 'chars')
+          PY
+          exit $status
