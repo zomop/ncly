@@ -522,8 +522,9 @@ impl Tensor {
                 "tensor is not contiguous",
             ));
         }
+        let len = self.len();
         let data = Arc::make_mut(&mut self.storage);
-        Ok(&mut data[..self.len()])
+        Ok(&mut data[..len])
     }
 }
 

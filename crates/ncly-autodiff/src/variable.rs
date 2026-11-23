@@ -36,6 +36,18 @@ use ncly_core::{Layout, NclyError, Result, Shape};
 use ncly_tensor::Tensor;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// How an adjoint flows from a node back to one of its parents.
+#[derive(Debug, Clone)]
+pub enum LocalGrad {
+    /// Multiply the adjoint by a local partial tensor, then reduce any
+    /// broadcasting back onto the parent's shape.
+    Elementwise(Tensor),
+    /// Permute the adjoint's axes, used by nodes that rearrange data
+    /// (transpose). The permutation is an axis order: `order[i]` is the axis of
+    /// the parent that output axis `i` came from.
+    Permute(Vec<usize>),
+}
+
 /// One recorded operation.
 #[derive(Debug, Clone)]
 pub struct VariableNode {
@@ -43,8 +55,8 @@ pub struct VariableNode {
     pub op: &'static str,
     /// Primal value of this node.
     pub data: Tensor,
-    /// `(parent index, local partial derivative)` pairs.
-    pub parents: Vec<(usize, Tensor)>,
+    /// `(parent index, local gradient rule)` pairs.
+    pub parents: Vec<(usize, LocalGrad)>,
     /// Accumulated adjoint, written during the backward sweep.
     pub adjoint: Tensor,
     /// Whether this node is a leaf the caller can read a gradient from.
@@ -54,7 +66,7 @@ pub struct VariableNode {
 }
 
 impl VariableNode {
-    fn new(op: &'static str, data: Tensor, parents: Vec<(usize, Tensor)>) -> Self {
+    fn new(op: &'static str, data: Tensor, parents: Vec<(usize, LocalGrad)>) -> Self {
         let adjoint = Tensor::zeros(data.shape().dims().to_vec());
         Self {
             op,
@@ -114,23 +126,13 @@ impl Tape {
     }
 
     /// Record an operation and return the new node index.
-    pub fn record(&self, op: &'static str, data: Tensor, parents: Vec<(usize, Tensor)>) -> usize {
+    pub fn record(&self, op: &'static str, data: Tensor, parents: Vec<(usize, LocalGrad)>) -> usize {
         let mut nodes = self.lock();
         let index = nodes.len();
         // Parents must already exist; a violation would make the reverse sweep
         // silently wrong, so it is checked in release builds too.
-        for &(parent, ref partial) in &parents {
-            assert!(parent < index, "autodiff: parent recorded after child");
-            let shape = nodes[parent].data.shape();
-            let mut expected = shape.dims().to_vec();
-            expected.insert(0, 1);
-            debug_assert_eq!(
-                partial.len(),
-                shape.size(),
-                "autodiff: partial for parent {parent} has {} elements, expected {}",
-                partial.len(),
-                shape.size()
-            );
+        for (parent, _) in &parents {
+            assert!(*parent < index, "autodiff: parent recorded after child");
         }
         nodes.push(VariableNode::new(op, data, parents));
         index
@@ -179,15 +181,39 @@ impl Tape {
         nodes[index].adjoint = Tensor::ones(shape.dims().to_vec());
 
         for cursor in (0..nodes.len()).rev() {
+            // Nodes downstream of the seed start at zero, so they contribute
+            // nothing. Skipping them also avoids *materialising* zero adjoints,
+            // which is what makes a backward sweep over a large tape cheap.
+            if nodes[cursor].adjoint.is_zero() {
+                continue;
+            }
             let adjoint = nodes[cursor].adjoint.clone();
             if adjoint.len() == 0 {
                 continue;
             }
             // Collect first to avoid holding a borrow while indexing parents.
             let parents = nodes[cursor].parents.clone();
-            for (parent, partial) in parents {
-                let contribution = adjoint.mul(&partial)?;
-                let reduced = sum_to_shape(&contribution, nodes[parent].data.shape())?;
+            for (parent, rule) in parents {
+                let target = nodes[parent].data.shape().clone();
+                let reduced = match rule {
+                    LocalGrad::Elementwise(partial) => {
+                        let contribution = adjoint.mul(&partial)?;
+                        sum_to_shape(&contribution, &target)?
+                    }
+                    LocalGrad::Permute(order) => {
+                        let permuted = permute_axes(&adjoint, &order);
+                        if permuted.shape() != &target {
+                            return Err(NclyError::Graph {
+                                reason: format!(
+                                    "permuted adjoint has shape {} but parent expects {}",
+                                    permuted.shape(),
+                                    target
+                                ),
+                            });
+                        }
+                        permuted
+                    }
+                };
                 let updated = nodes[parent].adjoint.add(&reduced)?;
                 nodes[parent].adjoint = updated;
             }
@@ -215,6 +241,21 @@ impl Tape {
         }
         out
     }
+}
+
+/// Reorder the axes of `value` and materialise the result.
+fn permute_axes(value: &Tensor, order: &[usize]) -> Tensor {
+    let mut dims = Vec::with_capacity(order.len());
+    let mut strides = Vec::with_capacity(order.len());
+    for &axis in order {
+        dims.push(value.shape().dims()[axis]);
+        strides.push(value.strides().get(axis).unwrap_or(0));
+    }
+    Tensor::from_parts(
+        Arc::clone(value.storage()),
+        Layout::new(Shape::new(dims), Strides::new(strides), value.layout().offset()),
+    )
+    .to_contiguous()
 }
 
 /// Sum a broadcast contribution back down to `target`.
@@ -357,7 +398,7 @@ impl Variable {
             .expect("broadcast failed in add");
         let left = Tensor::ones(self.value().shape().dims().to_vec());
         let right = Tensor::ones(rhs.value().shape().dims().to_vec());
-        self.record("add", data, vec![(self.index, left), (rhs.index, right)])
+        self.record("add", data, vec![(self.index, LocalGrad::Elementwise(left)), (rhs.index, LocalGrad::Elementwise(right))])
     }
 
     /// Element-wise subtraction (with broadcasting).
@@ -368,7 +409,7 @@ impl Variable {
             .expect("broadcast failed in sub");
         let left = Tensor::ones(self.value().shape().dims().to_vec());
         let right = Tensor::ones(rhs.value().shape().dims().to_vec()).neg();
-        self.record("sub", data, vec![(self.index, left), (rhs.index, right)])
+        self.record("sub", data, vec![(self.index, LocalGrad::Elementwise(left)), (rhs.index, LocalGrad::Elementwise(right))])
     }
 
     /// Element-wise product (with broadcasting).
@@ -379,7 +420,7 @@ impl Variable {
         self.record(
             "mul",
             data,
-            vec![(self.index, b), (rhs.index, a)],
+            vec![(self.index, LocalGrad::Elementwise(b)), (rhs.index, LocalGrad::Elementwise(a))],
         )
     }
 
@@ -393,7 +434,10 @@ impl Variable {
         self.record(
             "div",
             data,
-            vec![(self.index, inv_b), (rhs.index, d_b.neg())],
+            vec![
+                (self.index, LocalGrad::Elementwise(inv_b)),
+                (rhs.index, LocalGrad::Elementwise(d_b.neg_in_place())),
+            ],
         )
     }
 
@@ -401,7 +445,7 @@ impl Variable {
     pub fn exp(&self) -> Variable {
         let data = self.value().exp();
         let local = data.clone();
-        self.record("exp", data, vec![(self.index, local)])
+        self.record("exp", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `ln(x)`.
@@ -409,35 +453,35 @@ impl Variable {
         let value = self.value();
         let data = value.ln();
         let local = value.unary(ncly_tensor::UnaryOp::Recip);
-        self.record("ln", data, vec![(self.index, local)])
+        self.record("ln", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `sqrt(x)`.
     pub fn sqrt(&self) -> Variable {
         let data = self.value().sqrt();
         let local = data.muls(2.0).unary(ncly_tensor::UnaryOp::Recip);
-        self.record("sqrt", data, vec![(self.index, local)])
+        self.record("sqrt", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `sin(x)`.
     pub fn sin(&self) -> Variable {
         let data = self.value().sin();
         let local = self.value().cos();
-        self.record("sin", data, vec![(self.index, local)])
+        self.record("sin", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `cos(x)`.
     pub fn cos(&self) -> Variable {
         let data = self.value().cos();
         let local = self.value().sin().neg();
-        self.record("cos", data, vec![(self.index, local)])
+        self.record("cos", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `tanh(x)`.
     pub fn tanh(&self) -> Variable {
         let data = self.value().tanh();
         let local = data.mul(&data).expect("square").neg().adds(1.0);
-        self.record("tanh", data, vec![(self.index, local)])
+        self.record("tanh", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `x^n`.
@@ -445,7 +489,7 @@ impl Variable {
         let value = self.value();
         let data = value.powf(n as f64);
         let local = value.powf((n - 1) as f64).muls(n as f64);
-        self.record("powi", data, vec![(self.index, local)])
+        self.record("powi", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `x^p` for real `p`.
@@ -453,7 +497,7 @@ impl Variable {
         let value = self.value();
         let data = value.powf(p);
         let local = value.powf(p - 1.0).muls(p);
-        self.record("powf", data, vec![(self.index, local)])
+        self.record("powf", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// `|x|`.
@@ -470,21 +514,21 @@ impl Variable {
                 0.0
             }
         });
-        self.record("abs", data, vec![(self.index, local)])
+        self.record("abs", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Element-wise negation.
     pub fn neg(&self) -> Variable {
         let data = self.value().neg();
         let local = Tensor::full(self.value().shape().dims().to_vec(), -1.0);
-        self.record("neg", data, vec![(self.index, local)])
+        self.record("neg", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Multiply by a constant.
     pub fn scale(&self, scalar: f64) -> Variable {
         let data = self.value().muls(scalar);
         let local = Tensor::full(self.value().shape().dims().to_vec(), scalar);
-        self.record("scale", data, vec![(self.index, local)])
+        self.record("scale", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Sum over every axis, producing a 0-d variable.
@@ -493,7 +537,7 @@ impl Variable {
         let total = value.sum();
         let data = Tensor::scalar(total);
         let local = Tensor::ones(value.shape().dims().to_vec());
-        self.record("sum", data, vec![(self.index, local)])
+        self.record("sum", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Sum one axis (removed from the result).
@@ -501,7 +545,7 @@ impl Variable {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
         let data = value.sum_axis(axis)?;
-        Ok(self.record("sum_axis", data, vec![(self.index, local)]))
+        Ok(self.record("sum_axis", data, vec![(self.index, LocalGrad::Elementwise(local))]))
     }
 
     /// Sum several axes, keeping the listed ones.
@@ -509,7 +553,7 @@ impl Variable {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
         let data = value.sum_axes(axes)?;
-        Ok(self.record("sum_axes", data, vec![(self.index, local)]))
+        Ok(self.record("sum_axes", data, vec![(self.index, LocalGrad::Elementwise(local))]))
     }
 
     /// Mean over every axis.
@@ -518,7 +562,7 @@ impl Variable {
         let count = value.len();
         let data = Tensor::scalar(value.mean());
         let local = Tensor::full(value.shape().dims().to_vec(), 1.0 / count as f64);
-        self.record("mean", data, vec![(self.index, local)])
+        self.record("mean", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Reshape.
@@ -546,12 +590,15 @@ impl Variable {
     }
 
     /// Broadcast to a larger shape.
+    ///
+    /// The adjoint is summed back down to the operand shape by
+    /// [`sum_to_shape`], which is exactly the transpose of broadcasting.
     pub fn broadcast_to(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target = Shape::new(shape.into());
         let data = value.broadcast_to(target.dims().to_vec())?.to_contiguous();
-        let local = Tensor::ones(value.shape().dims().to_vec());
-        Ok(self.record("broadcast_to", data, vec![(self.index, local)]))
+        let local = Tensor::ones(target.dims().to_vec());
+        Ok(self.record("broadcast_to", data, vec![(self.index, LocalGrad::Elementwise(local))]))
     }
 
     /// Matrix product of two 2-d variables.
@@ -564,7 +611,10 @@ impl Variable {
         Ok(self.record(
             "matmul",
             data,
-            vec![(self.index, b_t), (rhs.index, a_t)],
+            vec![
+                (self.index, LocalGrad::Elementwise(b_t)),
+                (rhs.index, LocalGrad::Elementwise(a_t)),
+            ],
         ))
     }
 
@@ -577,7 +627,7 @@ impl Variable {
         let local = value.adds(-shift).exp();
         let total: f64 = local.sum();
         let local = local.muls(1.0 / total);
-        self.record("logsumexp", data, vec![(self.index, local)])
+        self.record("logsumexp", data, vec![(self.index, LocalGrad::Elementwise(local))])
     }
 
     /// Materialise the primal value.
@@ -663,9 +713,6 @@ impl Neg for &Variable {
         Variable::neg(self)
     }
 }
-
-#[allow(dead_code)]
-fn _layout_doc(_: Layout) {}
 
 #[cfg(test)]
 mod tests {

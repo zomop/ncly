@@ -8,6 +8,7 @@ repository.workspace = true
 description = "NCLY linalg crate (in progress)"
 
 [dependencies]
+ncly-core = { workspace = true }
 
 [lints]
 workspace = true

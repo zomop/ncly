@@ -54,8 +54,8 @@
 #![warn(missing_debug_implementations)]
 
 mod dual;
-mod ops;
+pub mod ops;
 mod variable;
 
 pub use dual::Dual;
-pub use variable::{Tape, Variable, VariableNode};
+pub use variable::{LocalGrad, Tape, Variable, VariableNode};

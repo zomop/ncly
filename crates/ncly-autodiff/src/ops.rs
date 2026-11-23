@@ -6,18 +6,13 @@
 use crate::variable::Variable;
 use ncly_core::Result;
 
-/// The `l2` norm `sqrt(Σ xᵢ²)` as one differentiable node chain.
+/// The `l2` norm `sqrt(Σ xᵢ²)`.
 ///
-/// The gradient is `x / ‖x‖`, which is `NaN`-free for the zero vector only
-/// because NCLY defines the subgradient of `‖0‖` as the zero vector.
+/// The gradient is `x / ‖x‖`, which is `NaN` at the origin; NCLY reports it as
+/// `NaN` rather than silently inventing a subgradient, so callers can detect
+/// the kink.
 pub fn norm(value: &Variable) -> Variable {
-    let squared = value.mul(value).sum();
-    let total = squared.scalar().expect("sum produces a 0-d value");
-    if total == 0.0 {
-        // Zero-norm gradient is defined as zero by convention.
-        return value.scale(0.0).sum();
-    }
-    squared.sqrt()
+    value.mul(value).sum().sqrt()
 }
 
 /// `log(Σ exp(xᵢ))` over all axes.
@@ -38,33 +33,8 @@ pub fn softplus(value: &Variable) -> Variable {
     value.logsumexp()
 }
 
-/// `sigmoid(x) = 1 / (1 + e^{-x})` expressed with stable primitives.
+/// `sigmoid(x) = 1 / (1 + e^{-x})`.
 pub fn sigmoid(value: &Variable) -> Variable {
-    // 1 / (1 + exp(-x)) written with a subtraction so the tape keeps a single
-    // division node.
-    let negated = value.neg();
-    let denominator = negated.exp().adds_one();
-    denominator.reciprocal()
-}
-
-trait AddsOne {
-    fn adds_one(&self) -> Variable;
-}
-
-impl AddsOne for Variable {
-    fn adds_one(&self) -> Variable {
-        let one = Variable::on_tape(self.tape(), ncly_tensor::Tensor::ones(self.value().shape().dims().to_vec()), "one");
-        self.add(&one)
-    }
-}
-
-trait Reciprocal {
-    fn reciprocal(&self) -> Variable;
-}
-
-impl Reciprocal for Variable {
-    fn reciprocal(&self) -> Variable {
-        let one = Variable::on_tape(self.tape(), ncly_tensor::Tensor::ones(self.value().shape().dims().to_vec()), "one");
-        one.div(self)
-    }
+    let one = Variable::on_tape(value.tape(), ncly_tensor::Tensor::scalar(1.0), "one");
+    one.add(&value.neg().exp()).recip()
 }

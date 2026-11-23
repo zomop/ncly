@@ -53,7 +53,9 @@ impl BinaryOp {
 }
 
 /// Unary element-wise operation selector.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// `Eq` is deliberately not derived: [`UnaryOp::Powf`] carries an `f64`.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
     /// `e^x`
     Exp,
@@ -110,7 +112,7 @@ impl UnaryOp {
 }
 
 /// A collapsed loop axis: shape/strides of the output and both operands.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct LoopAxis {
     len: usize,
     out_stride: usize,
@@ -645,6 +647,41 @@ impl Tensor {
     /// See [`crate::matmul`] for the algorithm and precision notes.
     pub fn matmul(&self, rhs: &Tensor) -> Result<Tensor> {
         crate::matmul::matmul(self, rhs)
+    }
+
+    /// True when every element is zero.
+    ///
+    /// Used by the reverse-mode sweep to skip nodes that received no adjoint;
+    /// for a contiguous tensor this short-circuits on the first non-zero.
+    pub fn is_zero(&self) -> bool {
+        if self.is_contiguous() {
+            return self.as_slice().is_some_and(|data| data.iter().all(|&v| v == 0.0));
+        }
+        let mut zero = true;
+        self.for_each_flat(|flat| {
+            if self.storage[flat] != 0.0 {
+                zero = false;
+            }
+        });
+        zero
+    }
+
+    /// Element-wise negation, reusing a uniquely owned buffer when possible.
+    ///
+    /// This matters on the hot path of reverse-mode accumulation, where every
+    /// subtraction node needs `-dy` for one of its parents.
+    pub fn neg_in_place(self) -> Tensor {
+        if self.is_contiguous() && Arc::strong_count(&self.storage) == 1 {
+            let mut out = self;
+            if let Ok(slice) = out.as_mut_slice() {
+                for value in slice {
+                    *value = -*value;
+                }
+            }
+            out
+        } else {
+            self.neg()
+        }
     }
 
     /// True when any element is NaN.

@@ -240,7 +240,7 @@ impl CsrMatrix {
             ));
         }
         let mut y = vec![0.0; self.rows];
-        for (result, row) in y.iter_mut().enumerate() {
+        for (row, result) in y.iter_mut().enumerate() {
             let start = self.row_ptr[row];
             let end = self.row_ptr[row + 1];
             let mut total = 0.0f64;
