@@ -1,0 +1,55 @@
+name: Bug report
+description: Something returns the wrong value, panics, or fails to build
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Numerical bugs are the most valuable kind —
+        please include the smallest input that reproduces the problem.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happens
+      description: The observed behaviour and what you expected instead.
+    validations: { required: true }
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Rust or Python. Include the input values exactly.
+      render: rust
+    validations: { required: true }
+  - type: input
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: "e.g. 1.0, 2.0 (from numpy.linalg.solve)"
+  - type: input
+    id: actual
+    attributes:
+      label: Actual result
+      placeholder: "e.g. 9.77, -18.0"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - tensor / broadcasting
+        - autodiff
+        - linear algebra
+        - sparse
+        - python bindings
+        - build / CI
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0 or a commit SHA"
+    validations: { required: true }
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `rustc --version`, `uname -a`, and the Python version if relevant.

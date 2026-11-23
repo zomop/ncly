@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a numerical feature, API change or optimisation
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        NCLY prefers a small correct library over a large one. Please say what
+        the feature buys and what evidence would show it works.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today?
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: API sketch, algorithm, or mathematical definition.
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How correctness would be demonstrated
+      description: Reference implementation, residual test, or finite-difference check.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - tensor / core
+        - autodiff
+        - linear algebra
+        - sparse
+        - python bindings
+        - graph / compiler (planned)
+        - tooling
+    validations: { required: true }

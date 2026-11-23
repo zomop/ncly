@@ -19,6 +19,10 @@ jobs:
             rustc --version
             echo "=== cargo build ==="
             cargo build --workspace --all-targets 2>&1 | grep -v '^\s*Compiling' | tail -140
+            echo "=== cargo fmt --check ==="
+            cargo fmt --all -- --check 2>&1 | head -40 || echo "fmt: differences (autofmt will fix)"
+            echo "=== cargo clippy ==="
+            cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -E '^(error|warning)' | head -60
             echo "=== cargo test ==="
             # `--no-fail-fast` so every failing test in every crate is reported,
             # `--nocapture` so the assertion values are visible.

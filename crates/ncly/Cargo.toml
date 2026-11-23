@@ -23,3 +23,21 @@ ncly-sparse = { workspace = true }
 
 [lints]
 workspace = true
+
+# Examples live at the repository root; they are compiled by `cargo build
+# --examples`, which is part of the CI check.
+[[example]]
+name = "tensors"
+path = "../../examples/tensors.rs"
+
+[[example]]
+name = "autodiff"
+path = "../../examples/autodiff.rs"
+
+[[example]]
+name = "linalg"
+path = "../../examples/linalg.rs"
+
+[[example]]
+name = "sparse"
+path = "../../examples/sparse.rs"
