@@ -2,16 +2,16 @@ name: probe
 on:
   push:
     branches: ['arena/**']
-  workflow_dispatch:
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: toolchain
+        run: rustc --version && cargo --version
+      - name: deliberate failure
         run: |
-          rustc --version
-          cargo --version
-          rustup toolchain list
-      - name: cache-probe
-        run: echo ok
+          cargo --version > /tmp/log.txt 2>&1
+          printf 'error[E0425]: cannot find value `probe_symbol` in this scope\n  --> src/lib.rs:3:5\n' >> /tmp/log.txt
+          echo "::error title=build-failure::$(tail -c 4000 /tmp/log.txt | tr '\n' '\x1e' | head -c 4000)"
+          exit 1
