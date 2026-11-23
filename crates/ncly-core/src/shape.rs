@@ -99,7 +99,7 @@ impl Shape {
     /// equal or when one of them is `1`, in which case the result takes the
     /// larger length.
     pub fn broadcast_with(&self, other: &Shape) -> Result<Shape> {
-        broadcast_shapes([self, other].into_iter())
+        broadcast_shapes([self, other])
     }
 
     /// Number of elements contributed by the axes strictly after `axis`.
@@ -479,14 +479,13 @@ impl Broadcast {
 }
 
 /// Broadcast a set of shapes into one result shape.
-pub fn broadcast_shapes<I>(shapes: I) -> Result<Shape>
+pub fn broadcast_shapes<'a, I>(shapes: I) -> Result<Shape>
 where
-    I: IntoIterator,
-    I::Item: AsRef<Shape>,
+    I: IntoIterator<Item = &'a Shape>,
 {
     let mut result: Vec<usize> = Vec::new();
     for shape in shapes {
-        let dims = shape.as_ref().dims();
+        let dims = shape.dims();
         if dims.len() > MAX_RANK {
             return Err(AxisError::RankOverflow { max_rank: MAX_RANK }.into());
         }

@@ -657,7 +657,8 @@ mod tests {
         let mut out = [0.0; 4];
         axpy(&mut out, 2.0, &a, 1, &b, 1);
         assert_eq!(out, [6.0, 7.0, 8.0, 9.0]);
-        scale(&mut out, &out, 1, 0.5);
+        let source = out;
+        scale(&mut out, &source, 1, 0.5);
         assert_eq!(out, [3.0, 3.5, 4.0, 4.5]);
     }
 
