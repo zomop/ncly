@@ -4,6 +4,8 @@
 //!
 //! Run with: `cargo run --release --example autodiff`
 
+use std::ops::Add;
+
 use ncly::autodiff::{Dual, Tape, Variable};
 use ncly::{NclyError, Tensor};
 
@@ -45,7 +47,7 @@ fn main() -> Result<(), NclyError> {
     let tape = Tape::new();
     let _guard = Variable::with_tape(&tape);
     let w = Variable::auto_tensor(Tensor::from_vec(vec![0.5, -1.5, 2.0], [3])?, "w");
-    let loss = w.mul(&w)?.sum(); // ‖w‖²
+    let loss = w.mul(&w).sum(); // ‖w‖²
     loss.backward();
     println!("∇‖w‖²  = {:?}", w.grad().to_vec());
     Ok(())

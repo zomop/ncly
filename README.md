@@ -66,7 +66,7 @@ use ncly::Tensor;
 let tape = Tape::new();
 let _guard = Variable::with_tape(&tape);
 let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0, 3.0], [3])?, "x");
-let y = x.mul(&x)?.sum();          // y = Σ xᵢ²
+let y = x.mul(&x).sum();           // y = Σ xᵢ²
 y.backward();
 assert_eq!(x.grad().to_vec(), vec![2.0, 4.0, 6.0]);
 # Ok::<(), ncly_core::NclyError>(())
@@ -284,7 +284,7 @@ fn main() -> ncly::Result<()> {
     let tape = Tape::new();
     let _guard = Variable::with_tape(&tape);
     let x = Variable::auto_tensor(Tensor::from_vec(vec![1.0, 2.0], [2])?, "x");
-    let y = x.mul(&x)?.sum();
+    let y = x.mul(&x).sum();
     y.backward();
     assert_eq!(x.grad().to_vec(), vec![2.0, 4.0]);
 
@@ -391,9 +391,16 @@ cargo run --release -p ncly-benchmarks -- --json  # machine-readable
 ```
 
 It reports the median and best wall time over repeated runs together with derived
-throughput (GFLOP/s for matmul, GiB/s for memory-bound kernels). Measurement
-results, including the machine they were measured on, are recorded in
-[`BENCHMARKS.md`](BENCHMARKS.md) — and only there.
+throughput (GFLOP/s for matmul, GiB/s for memory-bound kernels). The measured
+figures — with the machine, toolchain and flags they came from — are in
+[`BENCHMARKS.md`](BENCHMARKS.md) and nowhere else.
+
+Two data points from that file, chosen because they are honest rather than
+flattering: single-threaded `matmul` reaches 10–11 GFLOP/s at 256x256 and falls to
+6.2 at 512x512, and `tensor add` is about 3.5x slower than a bare `axpy` on the
+same element count because of the broadcast-plan bookkeeping around the kernel. The
+first is a missing register-blocked GEMM; the second is overhead that can be
+removed. Both are listed in the roadmap instead of being described as fast.
 
 ## Project layout
 

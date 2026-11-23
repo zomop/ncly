@@ -21,8 +21,9 @@ jobs:
             cargo build --workspace --all-targets 2>&1 | grep -v '^\s*Compiling' | tail -140
             echo "=== cargo fmt --check ==="
             cargo fmt --all -- --check 2>&1 | head -40 || echo "fmt: differences (autofmt will fix)"
-            echo "=== cargo clippy ==="
-            cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -E '^(error|warning)' | head -60
+            echo "=== cargo clippy (errors only) ==="
+            cargo clippy --workspace --all-targets -- -D warnings 2>&1 \
+              | grep -E '^(error|warning)' | sort | uniq -c | sort -rn | head -40
             echo "=== cargo test ==="
             # `--no-fail-fast` so every failing test in every crate is reported,
             # `--nocapture` so the assertion values are visible.
@@ -30,6 +31,12 @@ jobs:
             echo "=== cargo doc (deny warnings) ==="
             RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps 2>&1 | grep -E "^error|^warning" | head -30
           } > /tmp/log.txt 2>&1
+          # The pipeline above runs under `set +e` so the whole log is always
+          # uploaded. The gates are therefore re-run individually: a failing
+          # build, test or doc job must fail the job, not silently pass.
+          cargo build --workspace --all-targets --quiet || exit 1
+          cargo test --workspace --quiet || exit 1
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet || exit 1
           python3 .github/ci/post_log.py /tmp/log.txt
           tail -25 /tmp/log.txt
   python:

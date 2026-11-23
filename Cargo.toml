@@ -52,6 +52,19 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 similar_names = "allow"
 many_single_char_names = "allow"
+# Deliberately allowed, with reasons:
+#   cast_possible_wrap  — strides are `isize` by design (negative strides are a
+#                         planned feature) and every conversion is size-checked.
+#   wildcard_imports    — `use crate::*` inside a crate is idiomatic here and
+#                         keeps the module preludes readable.
+#   doc_markdown        — acronyms like `LU`, `QR`, `CSR` would be needlessly
+#                         backticked in prose.
+#   must_use_candidate  — most `Self`-returning methods are value semantics;
+#                         annotating every one of them is noise.
+cast_possible_wrap = "allow"
+wildcard_imports = "allow"
+doc_markdown = "allow"
+must_use_candidate = "allow"
 
 [profile.release]
 opt-level = 3
