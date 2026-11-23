@@ -7,11 +7,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
-      - name: toolchain info
+      - name: run
         run: |
           set +e
-          { rustc --version; cargo --version; python3 --version; } > /tmp/log.txt 2>&1
-          echo "probe ok" >> /tmp/log.txt
+          { echo "token length: ${#GITHUB_TOKEN}"; rustc --version; cargo --version; } > /tmp/log.txt 2>&1
+          echo "probe transport ok" >> /tmp/log.txt
           python3 .github/ci/post_log.py /tmp/log.txt
+          cat /tmp/log.txt

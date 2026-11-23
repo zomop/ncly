@@ -37,7 +37,7 @@ def main() -> int:
         log = open(path, encoding="utf-8", errors="replace").read()
     except OSError:
         log = "(log file missing)"
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     sha = os.environ.get("GITHUB_SHA")
     if not (token and repo and sha):
@@ -47,7 +47,11 @@ def main() -> int:
     total = max(1, (len(body) + CHUNK - 1) // CHUNK)
     for index in range(total):
         chunk = body[index * CHUNK : (index + 1) * CHUNK]
-        post(token, repo, sha, f"ncly log {index + 1}/{total}\n```\n{chunk}\n```\n")
+        try:
+            post(token, repo, sha, f"ncly log {index + 1}/{total}\n```\n{chunk}\n```\n")
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            print(f"post_log: upload failed: {exc!r}")
+            return 0
     print(f"post_log: uploaded {len(body)} chars in {total} chunk(s)")
     return 0
 
