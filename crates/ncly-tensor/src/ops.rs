@@ -162,8 +162,7 @@ fn collapse(
             continue;
         }
         if let Some(previous) = axes.last_mut() {
-            let mergeable = previous.out_stride
-                == candidate.out_stride * candidate.len
+            let mergeable = previous.out_stride == candidate.out_stride * candidate.len
                 && previous.a_stride == candidate.a_stride * candidate.len as isize
                 && previous.b_stride == candidate.b_stride * candidate.len as isize;
             if mergeable {
@@ -969,7 +968,10 @@ mod collapse_tests {
             let expected = a.add(&b).unwrap().to_vec();
             // Sum of elements is layout-independent, so it is a good checksum.
             let sum: f64 = expected.iter().sum();
-            assert_eq!(expected.len(), a.shape().broadcast_with(b.shape()).unwrap().size());
+            assert_eq!(
+                expected.len(),
+                a.shape().broadcast_with(b.shape()).unwrap().size()
+            );
             let recovered: f64 = expected.iter().sum();
             assert!((sum - recovered).abs() < 1e-9);
         }
@@ -992,8 +994,17 @@ mod collapse_tests {
         let shape = Shape::new([2usize, 3, 4]);
         let strides = shape.canonical_strides();
         let zero = Strides::new([0isize, 0, 0]);
-        let axes = collapse(&shape, strides.as_slice(), strides.as_slice(), zero.as_slice());
-        assert_eq!(axes.len(), 1, "a contiguous (2,3,4) operand must collapse fully");
+        let axes = collapse(
+            &shape,
+            strides.as_slice(),
+            strides.as_slice(),
+            zero.as_slice(),
+        );
+        assert_eq!(
+            axes.len(),
+            1,
+            "a contiguous (2,3,4) operand must collapse fully"
+        );
         assert_eq!(axes[0].len, 24);
         assert_eq!(axes[0].a_stride, 1);
         assert_eq!(axes[0].b_stride, 0);
@@ -1002,11 +1013,7 @@ mod collapse_tests {
     #[test]
     fn loop_axis_layout_assumption_holds_for_custom_layout() {
         // Arbitrary non-contiguous layout: strides chosen so nothing merges.
-        let layout = Layout::new(
-            Shape::new([2usize, 2]),
-            Strides::new([5isize, 2]),
-            0,
-        );
+        let layout = Layout::new(Shape::new([2usize, 2]), Strides::new([5isize, 2]), 0);
         let tensor = Tensor::from_parts(
             std::sync::Arc::new((0..20).map(f64::from).collect()),
             layout,
