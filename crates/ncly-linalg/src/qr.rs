@@ -149,7 +149,8 @@ impl Qr {
             // Start from e_column restricted to the full row space.
             let mut vector = vec![0.0; self.rows];
             vector[column] = 1.0;
-            // Apply reflectors in reverse order: Q = H_0 H_1 ... H_{n-1}.
+            // A = H_0·…·H_{n-1}·R, hence Q = H_0·…·H_{n-1} and the column
+            // Q·e_j is obtained by letting H_{n-1} act on e_j first.
             for k in (0..n).rev() {
                 if self.taus[k] == 0.0 {
                     continue;
@@ -180,7 +181,9 @@ impl Qr {
             ));
         }
         let mut out = x.to_vec();
-        for k in 0..self.cols {
+        // A = H_0·H_1·…·H_{n-1}·R, so Q = H_0·…·H_{n-1} and, when acting on a
+        // vector, the *last* reflector multiplies it first.
+        for k in (0..self.cols).rev() {
             if self.taus[k] == 0.0 {
                 continue;
             }
@@ -198,6 +201,8 @@ impl Qr {
     }
 
     /// Apply `Qᵀ` to a length-`m` vector.
+    ///
+    /// `Qᵀ = H_{n-1}·…·H_0`, so `H_0` is applied first.
     pub fn apply_qt(&self, x: &[f64]) -> Result<Vec<f64>> {
         if x.len() != self.rows {
             return Err(NclyError::invalid_shape(
@@ -206,7 +211,7 @@ impl Qr {
             ));
         }
         let mut out = x.to_vec();
-        for k in (0..self.cols).rev() {
+        for k in 0..self.cols {
             if self.taus[k] == 0.0 {
                 continue;
             }

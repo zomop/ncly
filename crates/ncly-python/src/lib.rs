@@ -54,7 +54,7 @@ fn fallible<T>(result: Result<T, NclyError>) -> PyResult<T> {
 /// print(b.sum())
 /// ```
 #[pyclass(name = "Tensor", module = "ncly")]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PyTensor {
     inner: RsTensor,
 }
@@ -117,6 +117,7 @@ impl PyTensor {
         Python::with_gil(|py| nest(py, &self.inner.to_vec(), self.inner.shape().dims(), 0))
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn __len__(&self) -> usize {
         self.inner.shape().dims().first().copied().unwrap_or(0)
     }
@@ -316,6 +317,7 @@ impl PyTensor {
 /// print(x.grad)
 /// ```
 #[pyclass(name = "GradTensor", module = "ncly")]
+#[derive(Debug)]
 pub struct PyGradTensor {
     inner: ncly_autodiff::Variable,
 }
@@ -351,8 +353,19 @@ impl PyGradTensor {
     }
 
     /// Accumulated gradient as a `Tensor`.
+    #[getter]
     fn grad(&self) -> PyTensor {
         PyTensor::wrap(self.inner.grad())
+    }
+
+    /// Accumulated gradient, callable form.
+    fn gradient(&self) -> PyTensor {
+        PyTensor::wrap(self.inner.grad())
+    }
+
+    /// Current value, callable form (same as [`PyGradTensor::value`]).
+    fn value_tensor(&self) -> PyTensor {
+        PyTensor::wrap(self.inner.value())
     }
 
     /// Shape of the underlying value.
@@ -573,6 +586,7 @@ fn eigvalsh(a: Vec<Vec<f64>>) -> PyResult<Vec<f64>> {
 
 /// Sparse CSR matrix constructed from coordinate lists.
 #[pyclass(name = "CsrMatrix", module = "ncly")]
+#[derive(Debug)]
 pub struct PyCsr {
     inner: ncly_sparse::CsrMatrix,
 }

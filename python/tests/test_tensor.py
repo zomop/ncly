@@ -109,7 +109,9 @@ def test_linear_algebra_helpers():
 
 
 def test_singular_matrix_raises():
-    with pytest.raises(ValueError):
+    # Singular systems map to ZeroDivisionError, matching the Rust
+    # `NclyError::Singular` variant.
+    with pytest.raises(ZeroDivisionError):
         ncly.solve([[1.0, 2.0], [2.0, 4.0]], [1.0, 2.0])
 
 
