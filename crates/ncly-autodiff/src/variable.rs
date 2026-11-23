@@ -47,6 +47,15 @@ pub enum LocalGrad {
     /// (transpose). The permutation is an axis order: `order[i]` is the axis of
     /// the parent that output axis `i` came from.
     Permute(Vec<usize>),
+    /// Reshape the adjoint back to the parent's shape (reshape is a bijection on
+    /// the element sequence, so its transpose is another reshape).
+    Reshape(Vec<usize>),
+    /// Matrix-product adjoint for the left operand: `G · Bᵀ`.
+    /// The payload is the *other* operand `B` with shape `(k, n)`.
+    MatmulLeft(Tensor),
+    /// Matrix-product adjoint for the right operand: `Aᵀ · G`.
+    /// The payload is the *other* operand `A` with shape `(m, k)`.
+    MatmulRight(Tensor),
 }
 
 /// One recorded operation.
@@ -226,6 +235,15 @@ impl Tape {
                             });
                         }
                         permuted
+                    }
+                    LocalGrad::Reshape(shape) => adjoint.to_contiguous().reshape(shape)?,
+                    LocalGrad::MatmulLeft(other) => {
+                        // d(A·B)/dA = G·Bᵀ
+                        adjoint.matmul(&other.transpose().to_contiguous())?
+                    }
+                    LocalGrad::MatmulRight(other) => {
+                        // d(A·B)/dB = Aᵀ·G
+                        other.transpose().to_contiguous().matmul(&adjoint)?
                     }
                 };
                 let updated = nodes[parent].adjoint.add(&reduced)?;
@@ -778,15 +796,14 @@ impl Variable {
     pub fn matmul(&self, rhs: &Variable) -> Result<Variable> {
         let (a, b) = (self.value(), rhs.value());
         let data = a.matmul(&b)?;
-        // ∂L/∂A = G·Bᵀ ; ∂L/∂B = Aᵀ·G, materialised lazily as functions.
-        let a_t = a.transpose().to_contiguous();
-        let b_t = b.transpose().to_contiguous();
+        // ∂L/∂A = G·Bᵀ ; ∂L/∂B = Aᵀ·G. Both are matrix products, *not*
+        // element-wise products, so they get dedicated adjoint rules.
         Ok(self.record(
             "matmul",
             data,
             vec![
-                (self.index, LocalGrad::Elementwise(b_t)),
-                (rhs.index, LocalGrad::Elementwise(a_t)),
+                (self.index, LocalGrad::MatmulLeft(b)),
+                (rhs.index, LocalGrad::MatmulRight(a)),
             ],
         ))
     }
@@ -969,7 +986,8 @@ mod tests {
         let y = Variable::auto_tensor(Tensor::from_vec(vec![10.0, 20.0], [2, 1]).unwrap(), "y");
         let z = (&x + &y).sum();
         z.backward();
-        assert_eq!(x.grad().to_vec(), vec![1.0, 1.0, 1.0]);
+        // z[i][j] = x[j] + y[i]; dL/dx[j] = 2 (one per row) and dL/dy[i] = 3.
+        assert_eq!(x.grad().to_vec(), vec![2.0, 2.0, 2.0]);
         assert_eq!(y.grad().to_vec(), vec![3.0, 3.0]);
     }
 

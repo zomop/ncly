@@ -1,0 +1,21 @@
+[package]
+name = "ncly-integration-tests"
+description = "Cross-crate integration tests and numerical validation for NCLY"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dev-dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
+ncly-autodiff = { workspace = true }
+ncly-linalg = { workspace = true }
+ncly-sparse = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
