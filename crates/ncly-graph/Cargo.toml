@@ -5,9 +5,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "NCLY graph crate (in progress)"
+description = "Dataflow graph with shape inference, validation and scheduling for NCLY"
 
 [dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
 
 [lints]
 workspace = true

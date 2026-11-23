@@ -22,8 +22,8 @@
 //! | [`autodiff`] | forward- and reverse-mode differentiation |
 //! | [`linalg`] | LU/QR/solvers/eigenvalues |
 //! | [`sparse`] | CSR/CSC storage and kernels |
-//!
-//! The `graph` and `compiler` crates are not yet exported; see `ROADMAP.md`.
+//! | [`graph`] | dataflow DAG with shape inference and scheduling |
+//! | [`compiler`] | constant folding, CSE, dead-node elimination |
 
 #![deny(missing_docs)]
 #![warn(missing_debug_implementations)]
@@ -35,11 +35,14 @@ pub use ncly_tensor as tensor;
 pub use ncly_autodiff as autodiff;
 pub use ncly_linalg as linalg;
 pub use ncly_sparse as sparse;
+pub use ncly_graph as graph;
+pub use ncly_compiler as compiler;
 
 pub use ncly_autodiff::{Dual, Tape, Variable};
 pub use ncly_core::{NclyError, Result, Shape, Strides};
 pub use ncly_linalg::{lu, qr};
 pub use ncly_sparse::CsrMatrix;
+pub use ncly_graph::{Graph, NodeId};
 pub use ncly_tensor::{BinaryOp, Tensor, UnaryOp};
 
 /// Version of the NCLY workspace.

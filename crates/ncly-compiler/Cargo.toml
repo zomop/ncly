@@ -5,9 +5,12 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "NCLY compiler crate (in progress)"
+description = "Optimising passes over NCLY graphs: constant folding, CSE, dead-node elimination"
 
 [dependencies]
+ncly-core = { workspace = true }
+ncly-graph = { workspace = true }
+ncly-tensor = { workspace = true }
 
 [lints]
 workspace = true

@@ -20,6 +20,8 @@ ncly-simd = { workspace = true }
 ncly-autodiff = { workspace = true }
 ncly-linalg = { workspace = true }
 ncly-sparse = { workspace = true }
+ncly-graph = { workspace = true }
+ncly-compiler = { workspace = true }
 
 [lints]
 workspace = true
@@ -41,3 +43,7 @@ path = "../../examples/linalg.rs"
 [[example]]
 name = "sparse"
 path = "../../examples/sparse.rs"
+
+[[example]]
+name = "graph"
+path = "../../examples/graph.rs"

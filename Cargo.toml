@@ -35,6 +35,8 @@ ncly-simd = { version = "0.1.0", path = "crates/ncly-simd" }
 ncly-autodiff = { version = "0.1.0", path = "crates/ncly-autodiff" }
 ncly-linalg = { version = "0.1.0", path = "crates/ncly-linalg" }
 ncly-sparse = { version = "0.1.0", path = "crates/ncly-sparse" }
+ncly-graph = { version = "0.1.0", path = "crates/ncly-graph" }
+ncly-compiler = { version = "0.1.0", path = "crates/ncly-compiler" }
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"
