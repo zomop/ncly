@@ -179,8 +179,11 @@ pub fn optimize_with_constants(
             // Constant only if every operand is known *and* was itself constant
             // rather than produced by executing an input-fed subgraph.
             if node.inputs.iter().all(|parent| folded.contains(parent)) {
-                let operands: Option<Vec<Tensor>> =
-                    node.inputs.iter().map(|parent| known.get(parent).cloned()).collect();
+                let operands: Option<Vec<Tensor>> = node
+                    .inputs
+                    .iter()
+                    .map(|parent| known.get(parent).cloned())
+                    .collect();
                 if let Some(operands) = operands {
                     if let Ok(value) = evaluate_constant(node, &operands) {
                         known.insert(id, value);
@@ -420,10 +423,7 @@ mod tests {
         let expected = reference.get(sum).unwrap().scalar_value().unwrap();
 
         let folded_output = NodeId(result.remap[&sum.0]);
-        let folded = result
-            .graph
-            .run(&[folded_output], &HashMap::new())
-            .unwrap();
+        let folded = result.graph.run(&[folded_output], &HashMap::new()).unwrap();
         let actual = folded.get(folded_output).unwrap().scalar_value().unwrap();
         assert!((expected - actual).abs() < 1e-15, "{expected} vs {actual}");
     }

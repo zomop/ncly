@@ -40,9 +40,9 @@ pub use ncly_sparse as sparse;
 
 pub use ncly_autodiff::{Dual, Tape, Variable};
 pub use ncly_core::{NclyError, Result, Shape, Strides};
+pub use ncly_graph::{Graph, NodeId};
 pub use ncly_linalg::{lu, qr};
 pub use ncly_sparse::CsrMatrix;
-pub use ncly_graph::{Graph, NodeId};
 pub use ncly_tensor::{BinaryOp, Tensor, UnaryOp};
 
 /// Version of the NCLY workspace.

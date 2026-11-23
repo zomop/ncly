@@ -206,7 +206,9 @@ impl Graph {
 
     /// The inferred output shape of a node.
     pub fn shape_of(&self, id: NodeId) -> &[usize] {
-        self.nodes.get(id.0).map_or(&[], |node| node.shape.as_slice())
+        self.nodes
+            .get(id.0)
+            .map_or(&[], |node| node.shape.as_slice())
     }
 
     /// Every node, in append (topological) order.
@@ -540,7 +542,8 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
             Ok(shape)
         }
         Op::Broadcast(target) => {
-            let broadcast = Shape::new(first.to_vec()).broadcast_with(&Shape::new(target.clone()))?;
+            let broadcast =
+                Shape::new(first.to_vec()).broadcast_with(&Shape::new(target.clone()))?;
             if broadcast.dims() != target.as_slice() {
                 return Err(NclyError::InvalidShape {
                     op: "broadcast",
@@ -561,8 +564,8 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
                 return Err(NclyError::InvalidShape {
                     op: "reshape",
                     reason: format!(
-                    "cannot reshape {first:?} ({source_size}) to {target:?} ({target_size})"
-                ),
+                        "cannot reshape {first:?} ({source_size}) to {target:?} ({target_size})"
+                    ),
                 });
             }
             Ok(target.clone())
@@ -571,20 +574,13 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
     }
 }
 
-fn argument<'a>(
-    environment: &'a HashMap<NodeId, Tensor>,
-    id: NodeId,
-) -> Result<&'a Tensor> {
+fn argument<'a>(environment: &'a HashMap<NodeId, Tensor>, id: NodeId) -> Result<&'a Tensor> {
     environment.get(&id).ok_or_else(|| NclyError::Graph {
         reason: format!("operand {id} has no value at execution time"),
     })
 }
 
-fn evaluate(
-    op: Op,
-    inputs: &[NodeId],
-    environment: &HashMap<NodeId, Tensor>,
-) -> Result<Tensor> {
+fn evaluate(op: Op, inputs: &[NodeId], environment: &HashMap<NodeId, Tensor>) -> Result<Tensor> {
     Ok(match op {
         Op::Input => {
             return Err(NclyError::Graph {
@@ -595,19 +591,21 @@ fn evaluate(
         Op::Sub => argument(environment, inputs[0])?.sub(argument(environment, inputs[1])?)?,
         Op::Mul => argument(environment, inputs[0])?.mul(argument(environment, inputs[1])?)?,
         Op::Div => argument(environment, inputs[0])?.div(argument(environment, inputs[1])?)?,
-        Op::Matmul => argument(environment, inputs[0])?.matmul(argument(environment, inputs[1])?)?,
+        Op::Matmul => {
+            argument(environment, inputs[0])?.matmul(argument(environment, inputs[1])?)?
+        }
         Op::Exp => argument(environment, inputs[0])?.exp(),
         Op::Ln => argument(environment, inputs[0])?.ln(),
         Op::Tanh => argument(environment, inputs[0])?.tanh(),
         Op::Neg => argument(environment, inputs[0])?.neg(),
         Op::Sum => Tensor::scalar(argument(environment, inputs[0])?.sum()),
         Op::SumAxis(axis) => argument(environment, inputs[0])?.sum_axis(axis)?,
-        Op::Broadcast(target) => {
-            argument(environment, inputs[0])?
-                .broadcast_to(target)?
-                .to_contiguous()
-        }
-        Op::Transpose => argument(environment, inputs[0])?.transpose().to_contiguous(),
+        Op::Broadcast(target) => argument(environment, inputs[0])?
+            .broadcast_to(target)?
+            .to_contiguous(),
+        Op::Transpose => argument(environment, inputs[0])?
+            .transpose()
+            .to_contiguous(),
         Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target)?,
     })
 }
