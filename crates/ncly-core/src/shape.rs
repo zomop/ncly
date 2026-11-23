@@ -582,8 +582,14 @@ mod tests {
 
     #[test]
     fn broadcast_plan_zeroes_expanded_axes() {
+        // Source (3,1) has canonical strides (1,1). Broadcasting to (2,3,4)
+        // keeps stride 1 on the middle axis and zeroes the expanded ones.
         let plan = Broadcast::plan(&Shape::new([3, 1]), &Shape::new([2, 3, 4])).unwrap();
-        assert_eq!(plan.strides, vec![0, 4, 0]);
+        assert_eq!(plan.strides, vec![0, 1, 0]);
+
+        // A contiguous (3,4) operand keeps its canonical strides.
+        let plan = Broadcast::plan(&Shape::new([3, 4]), &Shape::new([3, 4])).unwrap();
+        assert_eq!(plan.strides, vec![4, 1]);
     }
 
     #[test]

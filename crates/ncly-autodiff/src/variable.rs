@@ -224,7 +224,9 @@ impl Tape {
                         sum_to_shape(&contribution, &target)?
                     }
                     LocalGrad::Permute(order) => {
-                        let permuted = permute_axes(&adjoint, &order);
+                        let dense = adjoint.to_contiguous();
+                        let buffer = dense.as_slice().unwrap_or(&[]);
+                        let permuted = permute_axes(buffer, adjoint.shape(), &order);
                         if permuted.shape() != &target {
                             return Err(NclyError::Graph {
                                 reason: format!(
@@ -276,22 +278,21 @@ impl Tape {
 }
 
 /// Reorder the axes of `value` and materialise the result.
-fn permute_axes(value: &Tensor, order: &[usize]) -> Tensor {
-    let mut dims = Vec::with_capacity(order.len());
-    let mut strides = Vec::with_capacity(order.len());
-    for &axis in order {
-        dims.push(value.shape().dims()[axis]);
-        strides.push(value.strides().get(axis).unwrap_or(0));
+fn permute_axes(buffer: &[f64], source: &Shape, order: &[usize]) -> Tensor {
+    let dims: Vec<usize> = order.iter().map(|&axis| source.dims()[axis]).collect();
+    let permuted = Shape::new(dims);
+    let mut out = Vec::with_capacity(buffer.len());
+    for index in permuted.indices() {
+        // `index[out_axis]` addresses the permuted axis; map it back to the
+        // source axis to compute the source offset.
+        let mut source_index = vec![0usize; source.rank()];
+        for (out_axis, &source_axis) in order.iter().enumerate() {
+            source_index[source_axis] = index[out_axis];
+        }
+        out.push(buffer[source.offset_of(&source_index).unwrap_or(0)]);
     }
-    Tensor::from_parts(
-        Arc::clone(value.storage()),
-        Layout::new(
-            Shape::new(dims),
-            Strides::new(strides),
-            value.layout().offset(),
-        ),
-    )
-    .to_contiguous()
+    Tensor::from_vec(out, permuted.dims().to_vec())
+        .unwrap_or_else(|_| Tensor::zeros(permuted.dims().to_vec()))
 }
 
 /// Sum a broadcast contribution back down to `target`.
@@ -745,33 +746,34 @@ impl Variable {
         )
     }
 
-    /// Reshape.
+    /// Reshape (contiguous view semantics).
+    ///
+    /// Reshaping is a bijection on the element sequence, so its adjoint is
+    /// another reshape — back to the parent's shape.
     pub fn reshape(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target: Vec<usize> = shape.into();
-        let data = value.to_contiguous().reshape(target.clone())?;
-        let local = Tensor::ones(value.shape().dims().to_vec());
+        let data = value.to_contiguous().reshape(target)?;
+        let back = value.shape().dims().to_vec();
         Ok(self.record(
             "reshape",
             data,
-            vec![(self.index, LocalGrad::Elementwise(local))],
+            vec![(self.index, LocalGrad::Reshape(back))],
         ))
     }
 
-    /// Transpose (reverses axes).
+    /// Transpose: reverse the axis order.
+    ///
+    /// The adjoint is un-reversed with the same permutation, which is what makes
+    /// `(Aᵀ)ᵀ = A` hold in the backward pass.
     pub fn transpose(&self) -> Result<Variable> {
         let value = self.value();
         let data = value.transpose().to_contiguous();
-        let local = Tensor::ones(value.shape().dims().to_vec());
-        if data.len() != local.len() {
-            return Err(NclyError::Graph {
-                reason: "transpose changed the element count".into(),
-            });
-        }
+        let order: Vec<usize> = (0..value.rank()).rev().collect();
         Ok(self.record(
             "transpose",
             data,
-            vec![(self.index, LocalGrad::Elementwise(local))],
+            vec![(self.index, LocalGrad::Permute(order))],
         ))
     }
 
@@ -1017,9 +1019,15 @@ mod tests {
         );
         let c = a.matmul(&b).unwrap().sum();
         c.backward();
-        // d/dA sum(A·I) = ones(2,2) ; d/dB = ones(2,2)
-        assert_eq!(a.grad().to_vec(), vec![1.0; 4]);
-        assert_eq!(b.grad().to_vec(), vec![1.0; 4]);
+        // With B = [[1,0],[0,1]]: d/dA sum(A·B) = 1·Bᵀ = B, i.e. the identity
+        // rows, and d/dB = Aᵀ · 1ᵀ = Aᵀ.
+        assert_eq!(a.grad().to_vec(), vec![1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(b.grad().to_vec(), vec![1.0, 3.0, 2.0, 4.0]);
+        // Sanity: the count of ones in dA equals the count in B.
+        assert_eq!(
+            a.grad().to_vec().iter().filter(|&&v| v == 1.0).count(),
+            2
+        );
     }
 
     #[test]

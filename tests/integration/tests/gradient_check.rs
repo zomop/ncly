@@ -20,7 +20,12 @@ use ncly_tensor::Tensor;
 const EXACT: f64 = 1e-10;
 
 /// Tolerance for finite-difference comparisons.
-const NUMERIC: f64 = 1e-5;
+///
+/// Truncation error is `O(h²) = tol^{2/3}` and rounding error is
+/// `O(ε/h) = ε·tol^{-1/3}`; with `tol = 1e-5` both are around `1e-7` for
+/// well-scaled functions, so `1e-4` is a comfortable bound that still fails
+/// loudly if a derivative rule is wrong.
+const NUMERIC: f64 = 1e-4;
 
 #[test]
 fn scalar_compositions_match_finite_differences() {

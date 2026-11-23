@@ -128,8 +128,10 @@ mod tests {
         assert!(is_negligible(0.0, 1.0, DEFAULT_PIVOT_TOLERANCE));
         assert!(is_negligible(1e-14, 1.0, 1e-12));
         assert!(!is_negligible(1e-6, 1.0, 1e-12));
-        // Same relative magnitude, much larger scale.
-        assert!(!is_negligible(1e-3, 1e9, 1e-12));
+        // The test is *relative*: 1e-3 is negligible next to a scale of 1e9
+        // (ratio 1e-12) but not next to a scale of 1.
+        assert!(is_negligible(1e-3, 1e9, 1e-12));
+        assert!(!is_negligible(1e-3, 1.0, 1e-12));
     }
 
     #[test]

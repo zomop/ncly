@@ -217,8 +217,21 @@ mod tests {
         let layout = Layout::contiguous(Shape::new([3, 1]))
             .broadcast_to(&Shape::new([2, 3, 4]))
             .unwrap();
-        assert_eq!(layout.strides(), &Strides::new([0isize, 4, 0]));
-        assert_eq!(layout.span(), 13);
+        // `(3, 1)` has canonical strides `(1, 1)`; the surviving axis keeps
+        // stride 1 and the two expanded axes get stride 0.
+        assert_eq!(layout.strides(), &Strides::new([0isize, 1, 0]));
+        assert_eq!(layout.span(), 3);
+        assert_eq!(layout.flat(&[1, 2, 3]).unwrap(), 2);
+    }
+
+    #[test]
+    fn broadcast_keeps_the_strides_of_a_transposed_view() {
+        // (2, 3) transposed to (3, 2) has strides (1, 3); broadcasting must
+        // preserve that, not fall back to canonical strides.
+        let view = Layout::contiguous(Shape::new([2, 3])).transpose();
+        let layout = view.broadcast_to(&Shape::new([5, 3, 2])).unwrap();
+        assert_eq!(layout.strides(), &Strides::new([0isize, 1, 3]));
+        assert_eq!(layout.flat(&[4, 2, 1]).unwrap(), 2 + 3);
     }
 
     #[test]
