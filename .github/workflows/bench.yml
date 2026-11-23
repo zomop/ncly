@@ -1,0 +1,26 @@
+name: bench
+on:
+  push:
+    branches: ['arena/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - name: run benchmarks
+        run: |
+          set +e
+          {
+            echo "host: $(uname -srm)"
+            echo "rustc: $(rustc --version)"
+            grep -m1 'model name' /proc/cpuinfo || true
+            cargo run --release -p ncly-benchmarks 2>&1 | grep -v '^\s*Compiling'
+          } > /tmp/bench.txt 2>&1
+          python3 .github/ci/post_log.py /tmp/bench.txt
+          cat /tmp/bench.txt
