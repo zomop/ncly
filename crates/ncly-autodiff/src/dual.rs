@@ -371,7 +371,7 @@ mod tests {
     fn quotient_rule() {
         let x = Dual::variable(3.0);
         let y = Dual::constant(4.0);
-        assert!((x / y).tangent - 0.25).abs() < 1e-15);
+        assert!(((x / y).tangent - 0.25).abs() < 1e-15);
     }
 
     #[test]
