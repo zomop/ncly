@@ -59,7 +59,7 @@ impl fmt::Display for NodeId {
 /// An operation in the graph.
 ///
 /// Every variant has a closed-form shape rule, applied by [`Graph::add_node`].
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Op {
     /// A leaf value supplied by the caller.
     Input,
@@ -514,25 +514,29 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
                 }
             };
             if inner != rhs_inner {
-                return Err(NclyError::shape_mismatch("matmul", &[inner], &[rhs_inner]));
+                return Err(NclyError::shape_mismatch(
+                    "matmul",
+                    format!("inner extent {inner}"),
+                    format!("inner extent {rhs_inner}"),
+                ));
             }
-            Ok(match (lhs.rank(), rhs.rank()) {
+            match (lhs.rank(), rhs.rank()) {
                 (2, 2) => vec![rows, cols],
                 (1, 2) => vec![cols],
                 (2, 1) => vec![rows],
                 _ => vec![1],
-            })
+            }
         }
         Op::Sum => vec![],
         Op::SumAxis(axis) => {
-            if *axis >= first.len() {
+            if axis >= first.len() {
                 return Err(NclyError::InvalidShape {
                     op: "sum_axis",
                     reason: format!("axis {axis} is out of range for rank {}", first.len()),
                 });
             }
             let mut shape = first.to_vec();
-            shape.remove(*axis);
+            shape.remove(axis);
             Ok(shape)
         }
         Op::Broadcast(target) => {
@@ -556,7 +560,9 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
             if source_size != target_size {
                 return Err(NclyError::InvalidShape {
                     op: "reshape",
-                    reason: format!("cannot reshape {first:?} ({source_size}) to {target:?} ({target_size})"),
+                    reason: format!(
+                    "cannot reshape {first:?} ({source_size}) to {target:?} ({target_size})"
+                ),
                 });
             }
             Ok(target.clone())
@@ -597,10 +603,12 @@ fn evaluate(
         Op::Sum => Tensor::scalar(argument(environment, inputs[0])?.sum()),
         Op::SumAxis(axis) => argument(environment, inputs[0])?.sum_axis(axis)?,
         Op::Broadcast(target) => {
-            argument(environment, inputs[0])?.broadcast_to(target.clone())?.to_contiguous()
+            argument(environment, inputs[0])?
+                .broadcast_to(target)?
+                .to_contiguous()
         }
         Op::Transpose => argument(environment, inputs[0])?.transpose().to_contiguous(),
-        Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target.clone())?,
+        Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target)?,
     })
 }
 

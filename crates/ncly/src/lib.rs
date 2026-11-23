@@ -33,10 +33,10 @@ pub use ncly_simd as simd;
 pub use ncly_tensor as tensor;
 
 pub use ncly_autodiff as autodiff;
+pub use ncly_compiler as compiler;
+pub use ncly_graph as graph;
 pub use ncly_linalg as linalg;
 pub use ncly_sparse as sparse;
-pub use ncly_graph as graph;
-pub use ncly_compiler as compiler;
 
 pub use ncly_autodiff::{Dual, Tape, Variable};
 pub use ncly_core::{NclyError, Result, Shape, Strides};

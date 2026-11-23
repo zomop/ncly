@@ -273,8 +273,12 @@ struct Signature {
 }
 
 fn evaluate_constant(node: &Node, operands: &[Tensor]) -> Result<Tensor> {
-    match node.op {
-        Op::Input => return Err(NclyError::Graph { reason: "not a constant".into() }),
+    let value = match node.op {
+        Op::Input => {
+            return Err(NclyError::Graph {
+                reason: "an input node is never a constant".into(),
+            })
+        }
         Op::Add => operands[0].add(&operands[1])?,
         Op::Sub => operands[0].sub(&operands[1])?,
         Op::Mul => operands[0].mul(&operands[1])?,
@@ -286,16 +290,11 @@ fn evaluate_constant(node: &Node, operands: &[Tensor]) -> Result<Tensor> {
         Op::Neg => operands[0].neg(),
         Op::Sum => Tensor::scalar(operands[0].sum()),
         Op::SumAxis(axis) => operands[0].sum_axis(axis)?,
-        Op::Broadcast(ref target) => operands[0].broadcast_to(target.clone())?.to_contiguous(),
+        Op::Broadcast(target) => operands[0].broadcast_to(target)?.to_contiguous(),
         Op::Transpose => operands[0].transpose().to_contiguous(),
-        Op::Reshape(ref target) => operands[0].reshape(target.clone())?,
-    })
-    .map(|tensor| {
-        // Folding must not change the inferred shape; if it did, the shape rule
-        // and the kernel disagree and the graph would be invalid.
-        let _ = Shape::new(node.shape.clone());
-        tensor
-    })
+        Op::Reshape(target) => operands[0].reshape(target)?,
+    };
+    Ok(value)
 }
 
 /// A printable description of what a pass set would do, without running it.
