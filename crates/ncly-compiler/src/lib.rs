@@ -562,7 +562,12 @@ mod tests {
             .filter(|node| node.value.is_some())
             .filter_map(|node| node.name.as_deref())
             .collect();
-        assert_eq!(baked, vec!["c", "mul[folded]"], "{}", result.graph.describe());
+        assert_eq!(
+            baked,
+            vec!["c", "mul[folded]"],
+            "{}",
+            result.graph.describe()
+        );
 
         // Numerical check: the folded leaf equals exp(c) * exp(c).
         let mut values = HashMap::new();
