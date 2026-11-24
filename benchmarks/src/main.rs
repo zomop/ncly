@@ -20,9 +20,12 @@
 //! cargo run --release -p ncly-benchmarks -- [filter]
 //! ```
 
+use ncly_compiler::{optimize_with_constants, Passes};
+use ncly_graph::{Graph, NodeId, Op};
 use ncly_linalg::lu::Lu;
 use ncly_sparse::CsrMatrix;
 use ncly_tensor::Tensor;
+use std::collections::HashMap;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -134,6 +137,9 @@ fn main() {
     }
     if want("transpose") {
         results.push(benchmark_transpose_copy());
+    }
+    if want("graph") {
+        results.extend(benchmark_graph_optimiser());
     }
 
     print_table(&results);
@@ -280,6 +286,82 @@ fn benchmark_transpose_copy() -> Measurement {
         a.transpose().to_contiguous().sum()
     })
     .pipe(|m| with_bytes(m, bytes))
+}
+
+/// What the optimiser buys on a graph with a repeated constant subexpression.
+///
+/// The graph is `out = tanh(exp(c) * exp(c)) + x`, where `c` is a compile-time
+/// constant of `n` elements and `x` is the only run-time input. Folding evaluates
+/// `exp(c) * exp(c)` once at compile time and bakes the result into a leaf, so the
+/// optimised graph evaluates one `exp`/`mul` pair fewer *and* never allocates the
+/// folded intermediates at run time.
+///
+/// Both timings include the per-run `HashMap` allocation and shape checks, because
+/// that is what a caller actually pays; the difference is therefore a lower bound
+/// on the arithmetic saved.
+fn benchmark_graph_optimiser() -> Vec<Measurement> {
+    let n = 1 << 16;
+    let mut graph = Graph::new();
+    let x = graph.input([n], "x");
+    let constant = graph.input([n], "c");
+    let exp = graph.add_node(Op::Exp, &[constant]).expect("exp");
+    let product = graph.add_node(Op::Mul, &[exp, exp]).expect("mul");
+    let summed = graph.add_node(Op::Add, &[product, x]).expect("add");
+    let output = graph.add_node(Op::Tanh, &[summed]).expect("tanh");
+
+    let mut constants = HashMap::new();
+    constants.insert(constant, Tensor::uniform([n], 21));
+    let optimised = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
+    let optimised_out = NodeId(optimised.remap[&output.0]);
+
+    let mut values = HashMap::new();
+    values.insert(x, Tensor::uniform([n], 22));
+
+    let fold_report = format!(
+        "folded={}, cse={}, dce={}",
+        optimised.folded, optimised.removed_duplicates, optimised.removed_dead
+    );
+
+    let plain = measure(
+        "graph: unoptimised run",
+        format!("n=2^16, nodes={}", graph.len()),
+        20,
+        || graph.run(&[output], &values).map(|e| e.get(output).map(|t| t.sum())),
+    );
+    let folded = measure(
+        "graph: after folding/CSE/DCE",
+        format!("n=2^16, nodes={}, {fold_report}", optimised.graph.len()),
+        20,
+        || {
+            optimised
+                .graph
+                .run(&[optimised_out], &values)
+                .map(|e| e.get(optimised_out).map(|t| t.sum()))
+        },
+    );
+
+    // The optimised run must produce the same number, otherwise the pass is not
+    // semantics-preserving and the timing is meaningless.
+    let reference = graph
+        .run(&[output], &values)
+        .expect("plain run")
+        .get(output)
+        .expect("output")
+        .clone();
+    let candidate = optimised
+        .graph
+        .run(&[optimised_out], &values)
+        .expect("optimised run")
+        .get(optimised_out)
+        .expect("output")
+        .clone();
+    assert_eq!(
+        reference.to_vec(),
+        candidate.to_vec(),
+        "optimised graph must agree with the original"
+    );
+
+    vec![plain, folded]
 }
 
 fn print_table(results: &[Measurement]) {
