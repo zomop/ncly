@@ -584,6 +584,7 @@ impl Tensor {
     }
 
     /// Element-wise negation.
+    #[must_use]
     pub fn neg(&self) -> Tensor {
         unary(self, UnaryOp::Neg)
     }
@@ -741,6 +742,7 @@ impl Tensor {
     ///
     /// This matters on the hot path of reverse-mode accumulation, where every
     /// subtraction node needs `-dy` for one of its parents.
+    #[must_use]
     pub fn neg_in_place(self) -> Tensor {
         if self.is_contiguous() && Arc::strong_count(&self.storage) == 1 {
             let mut out = self;

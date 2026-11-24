@@ -152,6 +152,9 @@ fn matmul_batched_by_matrix(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
     ))
 }
 
+/// Dense matrix product.
+///
+/// See the module-level documentation for the shape rules.
 pub fn matmul(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
     match (lhs.rank(), rhs.rank()) {
         (2, 2) => matmul_rank2(lhs, rhs),

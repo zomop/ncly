@@ -300,6 +300,7 @@ impl Tensor {
     ///
     /// This is the bridge between the strided world and algorithms that need
     /// dense, canonical data (LU, QR, sparse conversion, ...).
+    #[must_use]
     pub fn to_contiguous(&self) -> Tensor {
         if self.is_contiguous() {
             return self.clone();
@@ -349,7 +350,7 @@ impl Tensor {
     /// vector per element.
     pub(crate) fn for_each_flat<F: FnMut(usize)>(&self, mut f: F) {
         let rank = self.rank();
-        if self.len() == 0 {
+        if self.is_empty() {
             return;
         }
         let dims = self.shape().dims();
@@ -386,6 +387,7 @@ impl Tensor {
     // -----------------------------------------------------------------
 
     /// Reverse the axis order without copying.
+    #[must_use]
     pub fn transpose(&self) -> Tensor {
         Self {
             storage: Arc::clone(&self.storage),
@@ -486,6 +488,7 @@ impl Tensor {
     }
 
     /// Remove all axes of length 1 without copying.
+    #[must_use]
     pub fn squeeze(&self) -> Tensor {
         let dims: Vec<usize> = self
             .shape()
@@ -525,6 +528,7 @@ impl Tensor {
     ///
     /// Returns a tensor whose storage is guaranteed unique, so callers can use
     /// [`Tensor::as_mut_slice`] to write into it.
+    #[must_use]
     pub fn into_unique(self) -> Tensor {
         let contiguous = self.to_contiguous();
         match Arc::try_unwrap(contiguous.storage) {
