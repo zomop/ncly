@@ -188,15 +188,15 @@ fn fold_constants<S: BuildHasher>(
 
 /// Nodes still needed in the *rebuilt* graph.
 ///
-/// Reachability from the outputs, but stopping at folded nodes: a folded node is
-/// replaced by a leaf holding its value, so whatever used to feed it is no longer
-/// needed. Without this, a constant that only existed to feed a folded subgraph
-/// would survive as an unreachable input in the rewritten graph, and the caller
-/// would still be expected to supply a value for it.
+/// Reachability from the outputs, but stopping at nodes whose value is already
+/// known — those are rebuilt as leaves with the value baked in, so whatever used
+/// to feed them is no longer needed. Without this, a constant that only existed to
+/// feed a folded subgraph would survive as an unreachable node and the caller
+/// would still have to supply a value for it.
 fn needed_after_folding(
     graph: &Graph,
     outputs: &[NodeId],
-    folded: &HashSet<NodeId>,
+    known: &HashSet<NodeId>,
 ) -> HashSet<NodeId> {
     let mut seen = HashSet::new();
     let mut stack: Vec<NodeId> = outputs.to_vec();
@@ -204,7 +204,7 @@ fn needed_after_folding(
         if !seen.insert(id) {
             continue;
         }
-        if folded.contains(&id) {
+        if known.contains(&id) {
             continue;
         }
         let Some(node) = graph.nodes().get(id.0) else {
@@ -231,6 +231,11 @@ pub fn optimize(graph: &Graph, outputs: &[NodeId], passes: &Passes) -> Optimized
 /// A node is constant when every reachable leaf below it is present in
 /// `constants`. Such a subgraph is evaluated once and replaced by a new leaf
 /// holding the result, which removes both the arithmetic and the temporaries.
+///
+/// Every node with a known value is rebuilt as a leaf with that value baked in —
+/// including the leaves listed in `constants` themselves. `constants` therefore
+/// means "known at compile time", not "a value the caller still has to supply":
+/// the optimised graph runs with no input map for them at all.
 pub fn optimize_with_constants<S: BuildHasher>(
     graph: &Graph,
     outputs: &[NodeId],
@@ -258,7 +263,8 @@ pub fn optimize_with_constants<S: BuildHasher>(
     // `folded` first: this decides which nodes are still needed in the rebuilt
     // graph, which is *not* the same as the pre-fold liveness set.
     let needed = if passes.constant_folding {
-        needed_after_folding(graph, outputs, &folded)
+        let known_ids: HashSet<NodeId> = known.keys().copied().collect();
+        needed_after_folding(graph, outputs, &known_ids)
     } else {
         live.clone()
     };
@@ -281,14 +287,24 @@ pub fn optimize_with_constants<S: BuildHasher>(
         }
         let node = &graph.nodes()[index];
 
-        // A folded node becomes a leaf whose value is baked into the node, so the
-        // rewritten graph can be executed with no extra inputs.
-        if folded.contains(&id) {
+        // Every node with a known value becomes a leaf with that value baked in:
+        // both the operations evaluated here and the caller's constant leaves.
+        // Baking the leaves too is what makes `constants` mean "compile-time
+        // constant" rather than "value the caller must remember to pass again".
+        if known.contains_key(&id) {
             let value = known[&id].clone();
             let shape = value.shape().dims().to_vec();
-            let name = match node.name.as_deref() {
-                Some(name) => format!("{name}[folded]"),
-                None => format!("{}[folded]", node.op.name()),
+            let name = if folded.contains(&id) {
+                match node.name.as_deref() {
+                    Some(name) => format!("{name}[folded]"),
+                    None => format!("{}[folded]", node.op.name()),
+                }
+            } else {
+                // A caller-supplied constant keeps its name; it is the same value.
+                match node.name.as_deref() {
+                    Some(name) => name.to_string(),
+                    None => format!("{}[constant]", node.op.name()),
+                }
             };
             let new_id = rebuilt.folded_leaf(shape, value, name);
             remap.insert(index, new_id.0);
@@ -526,29 +542,27 @@ mod tests {
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
         // `exp` and `mul` fold; the add cannot, because `a` is an input.
         assert_eq!(result.folded, 2);
-        // Nodes: `a`, the single folded leaf holding `exp(c)·exp(c)`, and the
-        // add. Both folded operations are baked into *one* leaf, because the
-        // inner `exp` leaf is itself only reachable through the `mul`, so it is
-        // not rebuilt. The caller-supplied constant `c` disappears with the
-        // subgraph that consumed it, so only `a` is needed at run time.
+        // Nodes: `a`, the baked leaf for `c`, the single folded leaf holding
+        // `exp(c)·exp(c)`, and the add. Both folded operations land in *one* leaf,
+        // because the inner `exp` is only reachable through the `mul`. No
+        // constant has to be supplied at run time.
         assert_eq!(
             result.graph.len(),
-            graph.len() - 2,
+            graph.len() - 1,
             "{}",
             result.graph.describe()
         );
         assert_eq!(result.removed_dead, 0, "{}", result.graph.describe());
-        // `c` lost its own node: the rebuilt graph has no input of that name,
-        // because the subgraph that consumed it was replaced by baked leaves.
-        assert!(
-            !result
-                .graph
-                .nodes()
-                .iter()
-                .any(|node| node.name.as_deref() == Some("c")),
-            "{}",
-            result.graph.describe()
-        );
+        // `c` survives as a *baked* leaf with its own value, so the caller does
+        // not have to pass it again, and the folded product is a separate leaf.
+        let baked: Vec<&str> = result
+            .graph
+            .nodes()
+            .iter()
+            .filter(|node| node.value.is_some())
+            .filter_map(|node| node.name.as_deref())
+            .collect();
+        assert_eq!(baked, vec!["c", "mul[folded]"], "{}", result.graph.describe());
 
         // Numerical check: the folded leaf equals exp(c) * exp(c).
         let mut values = HashMap::new();

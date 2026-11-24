@@ -78,7 +78,8 @@ fn optimised_graph_agrees_with_the_unoptimised_one() {
 
     // `b` is a compile-time constant, but `a` is not, so nothing can fold. That is
     // the case worth testing: an optimiser must not "helpfully" evaluate a
-    // partially-known expression.
+    // partially-known expression. The constant leaf itself is still baked in, so
+    // the run below supplies only `a`.
     let mut constants = HashMap::new();
     constants.insert(b, b_value.clone());
     let optimised = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
@@ -232,7 +233,8 @@ fn dead_code_elimination_does_not_change_the_result() {
     let junk = graph.add_node(Op::Exp, &[a]).unwrap();
     let junk = graph.add_node(Op::Exp, &[junk]).unwrap();
     let junk = graph.add_node(Op::Neg, &[junk]).unwrap();
-    assert_eq!(graph.len(), 4 + 3, "leaves, main path and the dead branch");
+    // Two leaves, four nodes on the live path, three on the dead branch.
+    assert_eq!(graph.len(), 9);
 
     let optimised = optimize(&graph, &[output], &Passes::all());
     assert_eq!(optimised.removed_dead, 3, "{}", optimised.graph.describe());
