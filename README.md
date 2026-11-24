@@ -97,7 +97,8 @@ assert_eq!(x.grad().to_vec(), vec![2.0, 4.0, 6.0]);
 - Householder QR, least squares (`lstsq`), residual norms
 - Cholesky (`L Lᵀ`) with indefiniteness detection
 - Symmetric eigen-decomposition (cyclic Jacobi) and general eigenvalues
-  (Hessenberg + shifted QR)
+  (Householder Hessenberg + implicitly shifted QR with Givens rotations),
+  validated against `numpy.linalg.eigvals` on random non-symmetric matrices
 
 **Sparse**
 
@@ -110,9 +111,17 @@ assert_eq!(x.grad().to_vec(), vec![2.0, 4.0, 6.0]);
 - `Tensor` for values, `GradTensor` for tape-based gradients, `CsrMatrix` for sparse
 - Errors map onto Python types (`ValueError`, `ZeroDivisionError`, `ArithmeticError`)
 
+**Graph and compiler**
+
+- `ncly-graph`: append-only DAG with eager shape inference, level scheduling and
+  checked execution
+- `ncly-compiler`: constant folding (baked leaf values), common-subexpression
+  elimination, dead-node elimination
+- Operator **fusion is not implemented** — there is no fused kernel or JIT, so
+  `exp → mul → sum` still makes three passes over memory (see [Roadmap](#roadmap))
+
 **Not implemented** (see [Roadmap](#roadmap)): GPU backends, multithreading,
-op fusion / CSE / dead-code elimination, complex numbers, higher-order
-derivatives, generic scalar types.
+operator fusion, complex numbers, higher-order derivatives, generic scalar types.
 
 ## Architecture
 
@@ -124,6 +133,8 @@ graph TD
     autodiff[ncly-autodiff<br/>dual numbers · tape]
     linalg[ncly-linalg<br/>LU · QR · Cholesky · eigen]
     sparse[ncly-sparse<br/>CSR · CSC]
+    graph[ncly-graph<br/>DAG · schedule · executor]
+    compiler[ncly-compiler<br/>folding · CSE · DCE]
     facade[ncly<br/>umbrella crate]
     python[ncly-python<br/>PyO3 extension]
 
@@ -132,10 +143,14 @@ graph TD
     tensor --> autodiff
     core --> linalg
     core --> sparse
+    tensor --> graph
+    graph --> compiler
     tensor --> facade
     autodiff --> facade
     linalg --> facade
     sparse --> facade
+    graph --> facade
+    compiler --> facade
     facade --> python
 ```
 
@@ -414,8 +429,8 @@ crates/
   ncly-sparse     CSR/CSC, spmv, spmm
   ncly            umbrella crate
   ncly-python     PyO3 bindings
-  ncly-graph      planned: DAG scheduling          (stub, not exported)
-  ncly-compiler   planned: fusion, CSE, DCE        (stub, not exported)
+  ncly-graph      DAG, shape inference, level schedule, executor
+  ncly-compiler   constant folding, CSE, dead-node elimination
 python/           maturin package + pytest suite
 tests/integration numerical validation across crates
 benchmarks/       reproducible timing harness
@@ -456,8 +471,9 @@ Correctness is checked four ways:
 | SIMD kernels and benchmark harness | done |
 | Python bindings | done |
 | Documentation, examples, CI | done |
-| Computational graph scheduler (`ncly-graph`) | **planned** |
-| Optimising passes: fusion, CSE, DCE (`ncly-compiler`) | **planned** |
+| Computational graph scheduler (`ncly-graph`) | done |
+| Optimising passes: CSE, DCE, constant folding (`ncly-compiler`) | done |
+| Operator fusion (`exp → mul → sum` in one pass) | **not implemented** |
 | Multithreaded kernels | **planned** |
 | GPU backend | **deferred** |
 

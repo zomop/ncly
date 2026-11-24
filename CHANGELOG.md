@@ -8,8 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Planned
 
-- `ncly-graph`: explicit DAG with dependency tracking and scheduling.
-- `ncly-compiler`: op fusion, common-subexpression elimination, dead-op removal.
+- Operator fusion in `ncly-compiler` (needs a fused kernel per pattern, or a JIT).
 - Multithreaded kernels.
 - GPU backend (deferred until the CPU path is stable).
 
@@ -69,6 +68,15 @@ First functional release. Everything below is implemented and covered by tests.
   zeros and sorted rows/columns.
 - `spmv`, `spmv_transpose`, `spmm`, sparse addition, scaling, dense conversion.
 
+**Graph and compiler (`ncly-graph`, `ncly-compiler`)**
+
+- Append-only DAG whose node ids are a topological order; shape inference at
+  `add_node`, so an ill-typed graph cannot be built.
+- Execution in dependency levels, each node's produced shape verified.
+- Constant folding (with baked leaf values), common-subexpression elimination and
+  dead-node elimination. Operator fusion is *not* implemented and is documented as
+  such.
+
 **Python (`ncly-python`, `python/`)**
 
 - PyO3 0.23 (`abi3-py38`) module `ncly` with `Tensor`, `GradTensor`, `CsrMatrix`
@@ -97,6 +105,21 @@ First functional release. Everything below is implemented and covered by tests.
 - The finite-difference test step was derived from the comparison tolerance
   instead of machine epsilon, leaving a truncation error larger than the
   tolerance.
+- `Tensor::as_slice`/`as_slice_unchecked` ignored the layout offset, so a narrowed
+  but contiguous view read the wrong elements.
+- `eigen::eigenvalues` returned `n + 1` values: an unconditional final push
+  appended a phantom eigenvalue after the 1×1 and 2×2 deflation branches had
+  already produced every one.
+- `eigen::eigenvalues` never converged for a non-symmetric matrix: the first QR
+  rotation was built from the unshifted pencil (making it the identity), the bulge
+  chase ran over every row (re-filling the sub-diagonal it had just cleared), and
+  deflation tested a super-diagonal entry instead of the sub-diagonal. The shifted
+  QR step is now validated against `numpy.linalg.eigvals` for rotated, triangular
+  and random 5×5/8×8 matrices.
+- The general 2×2 eigenvalue solver had the sign of the quadratic root wrong, so
+  real eigenvalues came back negated whenever the trace was negative.
+- Combining two `Variable`s from different tapes silently produced a wrong
+  gradient; it is now a panic with an explanatory message.
 - A `lib` name collision between `ncly` and the Python extension produced
   duplicate `libncly.rlib` output.
 
@@ -106,4 +129,5 @@ First functional release. Everything below is implemented and covered by tests.
 - `f64` only; no generic scalar type.
 - No complex support in tensors (general eigenvalues report complex pairs but do
   not return complex vectors).
-- `ncly-graph` and `ncly-compiler` are not yet implemented and are not exported.
+- Operator fusion is not implemented; only folding, CSE and dead-node removal are.
+- `ncly-graph` has no device or memory-planning model.

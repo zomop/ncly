@@ -405,7 +405,7 @@ fn two_by_two(h: &[f64], n: usize, start: usize) -> (f64, f64, f64, f64) {
     }
 }
 
-/// One implicit-shifted QR step (Francis single shift) on the active window
+/// One single-shift implicit QR step on the active window
 /// `[low, high]` of an upper Hessenberg matrix.
 ///
 /// The first plane rotation is chosen to annihilate `(h[low][low] - shift,

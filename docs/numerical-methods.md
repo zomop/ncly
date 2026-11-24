@@ -132,11 +132,37 @@ decrease; NCLY has a regression test that fails on the wrong sign.
 
 ## General eigenvalues
 
-Reduction to upper Hessenberg by Householder similarity, then the shifted QR
-iteration (Wilkinson shift, deflation on a small sub-diagonal), yielding
-eigenvalues as real or complex-conjugate pairs. This is only used when the input is
-not symmetric; the symmetric path is preferred because it is both faster and more
-accurate.
+Reduction to upper Hessenberg by Householder similarity, then the implicitly
+shifted QR iteration with Givens rotations and a **single** Wilkinson shift,
+yielding eigenvalues as real or complex-conjugate pairs. This is only used when
+the input is not symmetric; the symmetric path is preferred because it is both
+faster and more accurate.
+
+Because no complex arithmetic is used, a conjugate pair is handled structurally:
+when the trailing 2×2 block stays irreducible after the deflation test, the block
+is solved directly from its quadratic `λ² − tr·λ + det = 0` and the iteration
+moves on two rows higher. A purely real shift cannot separate a complex pair, so
+iterating on that block would never converge.
+
+Three details decide whether the iteration converges at all, and each of them has
+a regression test because each was wrong at some point:
+
+- **The shift enters the first rotation.** The first Givens rotation must
+  annihilate `(h[low][low] − σ, h[low+1][low])`. If it is built from
+  `(h[low][low], h[low+1][low])` instead — i.e. from the unshifted matrix — it is
+  applied to a matrix that is already Hessenberg, so the rotation is the identity
+  and the step does nothing.
+- **The bulge chase touches only the rows it can reach.** The right-hand rotation
+  runs over rows `0..=min(k+2, high)`. Applying it to every row pushes mass back
+  into the sub-diagonal entry that was just cleared, and the iteration cycles
+  forever.
+- **Deflation tests the sub-diagonal `h[i][i−1]`.** A Hessenberg matrix is zero
+  below the first sub-diagonal; testing `h[i−1][i]` (a super-diagonal entry)
+  reads data that has no reason to vanish and never deflates.
+
+The quadratic is solved in the numerically stable form that adds the root with
+the sign of the trace, and the second root follows from Vieta (`λ₁λ₂ = det`)
+rather than from a cancelling subtraction.
 
 ## Sparse kernels
 

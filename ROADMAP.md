@@ -13,41 +13,61 @@ implemented, tested and documented — the state column reflects that.
 | 6 | SIMD kernels and benchmark harness | done |
 | 7 | Python bindings | done |
 | 8 | Documentation, examples, CI | done |
-| 9 | Computational graph (`ncly-graph`) | planned |
-| 10 | Optimising passes (`ncly-compiler`) | planned |
+| 9 | Computational graph (`ncly-graph`) | done |
+| 10 | Optimising passes (`ncly-compiler`) | done, except fusion |
 | 11 | Multithreaded kernels | planned |
 | 12 | GPU backend | deferred |
 
-## 9. Computational graph
+## 9. Computational graph — done
 
-The tape in `ncly-autodiff` is a *linear* list, sufficient for gradients. A DAG
-is needed for optimisation: shared subexpressions must be identified, the nodes
-scheduled into levels, and the schedule validated against the shape rules.
+The tape in `ncly-autodiff` is a *linear* list, sufficient for gradients but not
+for optimisation. `ncly-graph` is an append-only DAG: a node id is always larger
+than the ids of its inputs, so the id order *is* a topological order and cycles
+are impossible by construction rather than by detection.
 
-Planned surface:
+Implemented surface (`crates/ncly-graph/src/lib.rs`):
 
 ```text
 Graph::new() -> Graph
-Graph::input(shape, name) -> Node
-Graph::op(kind, inputs) -> Node       // validated shape inference
-Graph::levels() -> Vec<Vec<Node>>     // topological levels
-Graph::validate() -> Result<Schedule> // dead nodes, cycles, shape mismatches
+Graph::input(shape, name) -> NodeId          // unvalidated shape is impossible
+Graph::add_node(op, &[NodeId]) -> NodeId     // shape inferred eagerly, parents validated
+Graph::plan() -> Schedule                    // dependency levels + descending cost
+Graph::run(outputs, values) -> Execution     // verifies every produced shape
+Graph::folded_leaf(shape, value, name)       // a constant baked into the node
 ```
 
-Exit criteria: shape inference for every op, deterministic scheduling, cycle
-detection, and the compiler passes below consuming a real graph.
+`Node.value` bakes a constant into the graph, so an optimised graph runs with an
+empty value map. Exit criteria met: shape inference for every op, deterministic
+scheduling, no cycles by construction, and the compiler passes below consuming a
+real graph. What is *not* there: any notion of a device, streams, or memory
+planning — nodes own their outputs.
 
-## 10. Optimising passes
+## 10. Optimising passes — done, except fusion
 
-Each pass must be provably semantics-preserving and measured:
+Each pass is semantics-preserving by construction; none of them reassociates
+floating-point arithmetic, because `(a + b) + c` is not the same `f64` as
+`a + (b + c)`.
 
-- **Dead-op elimination** — drop nodes with no path to an output.
-- **Common-subexpression elimination** — hash-cons identical `(op, inputs)`.
-- **Fusion** — emit `exp → mul → sum` as one pass over memory.
-- **Constant folding** — evaluate subgraphs with only constant inputs.
+| Pass | Status | What it does |
+| --- | --- | --- |
+| Dead-node elimination | done | keeps only nodes reachable from the requested outputs |
+| Common-subexpression elimination | done | hash-cons identical `(op, inputs)` signatures |
+| Constant folding | done | evaluates a node whose operands are all compile-time constants and replaces the subgraph with one baked leaf |
+| Fusion | **not implemented** | would need a fused kernel per pattern or a JIT; see below |
 
-Exit criteria: a benchmark where each pass reduces either time or allocations, with
-numbers recorded in `BENCHMARKS.md`.
+Folding is conservative: it applies only when every operand is known, and it
+never reorders arithmetic. `Optimized::removed_dead` counts dead nodes in the
+*input* graph; a constant that disappears because the subgraph consuming it was
+folded is reported through `folded`, not through `removed_dead`.
+
+**Fusion is out of scope for now.** Emitting `exp → mul → sum` as one pass over
+memory requires either a fused kernel in `ncly-simd` for each supported pattern
+or a just-in-time code generator. Writing a pass that *claims* to fuse without
+one would be exactly the kind of unbacked claim this project avoids, so the
+documentation says plainly that it is missing.
+
+Remaining exit criterion: a benchmark showing each implemented pass reducing time
+or allocations, with the numbers recorded in `BENCHMARKS.md`. Not yet done.
 
 ## 11. Multithreading
 

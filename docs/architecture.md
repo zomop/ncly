@@ -170,11 +170,36 @@ sequenceDiagram
     T-->>U: Tensor (one allocation)
 ```
 
-## Planned layers
+## Graph and compiler layers
 
-`ncly-graph` and `ncly-compiler` are stubs in this release. The intended design
-is recorded in [`ROADMAP.md`](../ROADMAP.md); they are intentionally *not*
-exported from the `ncly` crate until they do something real.
+`ncly-graph` sits directly above `ncly-tensor` and holds no state of its own
+beyond the node list, so it is trivially cloneable and inspectable.
+
+The central invariant is that **node ids are a topological order**: a node is
+created only after its inputs, and `add_node` validates every parent id, so a
+cycle cannot be represented. Shape inference runs inside `add_node`; a graph with
+mismatched shapes cannot be constructed, which means `plan` and `run` never have
+to re-check operand compatibility.
+
+```
+Graph::input(shape, name) -> NodeId      // leaf, shape fixed
+Graph::add_node(op, &[NodeId]) -> NodeId // parents checked, shape inferred now
+Graph::plan() -> Schedule                // level = max(parent level) + 1, cost-sorted
+Graph::run(outputs, values) -> Execution // verifies each produced shape
+```
+
+`Node::value` carries a baked constant. A folded literal therefore executes with
+an empty value map, which is what makes constant folding a real optimisation
+rather than a bookkeeping change.
+
+`ncly-compiler` rebuilds the graph in one forward pass, applying, in order:
+constant folding, CSE (hash-consing `Signature { op, inputs }`), and dead-node
+elimination (reachability from the requested outputs). Rewrites are conservative:
+constant operands must *all* be known, and no pass reassociates floating-point
+arithmetic.
+
+Operator fusion is **not** implemented: it needs a fused kernel per supported
+pattern or a JIT. See [`ROADMAP.md`](../ROADMAP.md).
 
 ## Testing strategy
 
@@ -186,4 +211,6 @@ exported from the `ncly` crate until they do something real.
 | autodiff | finite differences, forward-vs-reverse agreement, matmul/reshape adjoints |
 | linalg | `‖A − LU‖`, `‖A − QR‖`, `‖QᵀQ − I‖`, eigenpair residuals |
 | sparse | dense-reference agreement for `spmv`, `spmm`, `add`, conversions |
+| graph | shape inference per op, scheduling order, execution against dense reference |
+| compiler | folded/CSE/DCE counts against hand-computed expectations, output equality |
 | python | pytest suite run against the built extension in CI |
