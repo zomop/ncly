@@ -507,7 +507,11 @@ mod tests {
         // Rotation by 90°: eigenvalues ±i.
         let a = [0.0, -1.0, 1.0, 0.0];
         let values = eigenvalues(&a, 2).unwrap();
-        assert_eq!(values.len(), 2, "must return exactly n eigenvalues: {values:?}");
+        assert_eq!(
+            values.len(),
+            2,
+            "must return exactly n eigenvalues: {values:?}"
+        );
         let mut imaginary: Vec<f64> = values.iter().map(|v| v.1.abs()).collect();
         imaginary.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert!((imaginary[0] - 1.0).abs() < 1e-9, "{values:?}");

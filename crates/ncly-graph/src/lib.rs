@@ -239,7 +239,12 @@ impl Graph {
     ///
     /// Used by the optimiser to replace a folded subgraph; `run` then supplies the
     /// value automatically, so no entry in the value map is needed.
-    pub fn folded_leaf(&mut self, shape: impl Into<Vec<usize>>, value: Tensor, name: impl Into<String>) -> NodeId {
+    pub fn folded_leaf(
+        &mut self,
+        shape: impl Into<Vec<usize>>,
+        value: Tensor,
+        name: impl Into<String>,
+    ) -> NodeId {
         let shape: Vec<usize> = shape.into();
         self.nodes.push(Node {
             op: Op::Input,

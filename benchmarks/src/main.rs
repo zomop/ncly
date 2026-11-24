@@ -288,7 +288,9 @@ fn print_table(results: &[Measurement]) {
     for measurement in results {
         // `map_or_else` instead of `map(..).unwrap_or_else(..)`: the formatter is
         // only paid for when there is a value to show.
-        let gflops = measurement.gflops().map_or_else(|| "—".to_string(), |g| format!("{g:.2}"));
+        let gflops = measurement
+            .gflops()
+            .map_or_else(|| "—".to_string(), |g| format!("{g:.2}"));
         let bandwidth = measurement
             .gib_per_second()
             .map_or_else(|| "—".to_string(), |g| format!("{g:.2}"));
