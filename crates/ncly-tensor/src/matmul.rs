@@ -281,7 +281,7 @@ mod tests {
     fn matmul_respects_views() {
         let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2]).unwrap();
         let at = a.transpose(); // (2, 3)
-        // (2, 3) x (3, 2) = (2, 2); the product is aᵀ·a, *not* a·aᵀ.
+                                // (2, 3) x (3, 2) = (2, 2); the product is aᵀ·a, *not* a·aᵀ.
         let out = at.matmul(&a).unwrap();
         assert_eq!(out.to_vec(), vec![35.0, 44.0, 44.0, 56.0]);
         // And the other order, to pin both down.
