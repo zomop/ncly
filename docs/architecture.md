@@ -14,8 +14,8 @@ graph TD
     autodiff[ncly-autodiff<br/><i>dual numbers, tape</i>]
     linalg[ncly-linalg<br/><i>LU, QR, Cholesky, eigen</i>]
     sparse[ncly-sparse<br/><i>CSR, CSC</i>]
-    graph[ncly-graph<br/><i>planned: DAG + scheduling</i>]
-    compiler[ncly-compiler<br/><i>planned: fusion, CSE, DCE</i>]
+    graph[ncly-graph<br/><i>DAG, shape inference, schedule</i>]
+    compiler[ncly-compiler<br/><i>folding, CSE, DCE</i>]
     facade[ncly<br/><i>umbrella crate</i>]
     python[ncly-python<br/><i>PyO3 extension</i>]
 
@@ -33,14 +33,16 @@ graph TD
     autodiff --> python
     linalg --> python
     sparse --> python
-    tensor -.-> graph
-    graph -.-> compiler
+    tensor --> graph
+    graph --> compiler
 ```
 
 The dependency direction is strictly downwards. `ncly-core` depends on nothing,
 which is what lets `ncly-linalg` and `ncly-sparse` be used stand-alone (they do
 not pull in the tensor engine), and lets `ncly-autodiff` depend on the tensor
-engine without creating a cycle.
+engine without creating a cycle. `ncly-graph` builds on tensors, and
+`ncly-compiler` builds only on the graph, so the optimiser has no numeric code of
+its own.
 
 ## The layered invariants
 
