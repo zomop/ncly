@@ -45,8 +45,8 @@
 #![warn(missing_debug_implementations)]
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::hash::BuildHasher;
 use std::fmt;
+use std::hash::BuildHasher;
 
 use ncly_core::{NclyError, Result};
 use ncly_graph::{Graph, Node, NodeId, Op};
