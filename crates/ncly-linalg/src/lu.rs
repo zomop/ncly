@@ -219,7 +219,11 @@ impl Lu {
     pub fn determinant(&self) -> f64 {
         let n = self.size;
         // Each row swap flips the sign; an even number of swaps preserves it.
-        let mut sign = if self.swaps.is_multiple_of(2) { 1.0 } else { -1.0 };
+        let mut sign = if self.swaps.is_multiple_of(2) {
+            1.0
+        } else {
+            -1.0
+        };
         let mut log_abs = 0.0;
         for i in 0..n {
             let diagonal = self.factors[i * n + i];
@@ -238,7 +242,11 @@ impl Lu {
     pub fn log_determinant(&self) -> (f64, f64) {
         let n = self.size;
         // Each row swap flips the sign; an even number of swaps preserves it.
-        let mut sign = if self.swaps.is_multiple_of(2) { 1.0 } else { -1.0 };
+        let mut sign = if self.swaps.is_multiple_of(2) {
+            1.0
+        } else {
+            -1.0
+        };
         let mut log_abs = 0.0;
         for i in 0..n {
             let diagonal = self.factors[i * n + i];
