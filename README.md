@@ -134,25 +134,25 @@ graph TD
     autodiff[ncly-autodiff<br/>dual numbers · tape]
     linalg[ncly-linalg<br/>LU · QR · Cholesky · eigen]
     sparse[ncly-sparse<br/>CSR · CSC]
-    graph[ncly-graph<br/>DAG · schedule · executor]
+    gph[ncly-graph<br/>DAG · schedule · executor]
     compiler[ncly-compiler<br/>folding · CSE · DCE]
     facade[ncly<br/>umbrella crate]
-    python[ncly-python<br/>PyO3 extension]
+    pyext[ncly-python<br/>PyO3 extension]
 
     core --> simd --> tensor
     core --> tensor
     tensor --> autodiff
     core --> linalg
     core --> sparse
-    tensor --> graph
-    graph --> compiler
+    tensor --> gph
+    gph --> compiler
     tensor --> facade
     autodiff --> facade
     linalg --> facade
     sparse --> facade
-    graph --> facade
+    gph --> facade
     compiler --> facade
-    facade --> python
+    facade --> pyext
 ```
 
 Dependencies point strictly downwards, which is why `ncly-linalg` and
@@ -168,7 +168,7 @@ is extended to a larger shape by **inserting zero strides** on new and expanded
 axes. The flat address of logical index $\mathbf{i}$ is
 
 $$
-\operatorname{addr}(\mathbf{i}) = \text{base} + \sum_{k=0}^{n-1} i_k\, s_k ,
+\mathrm{addr}(\mathbf{i}) = \mathrm{base} + \sum_{k=0}^{n-1} i_k\, s_k ,
 $$
 
 and $s_k = 0$ makes the tensor independent of axis $k$ — which is exactly what
@@ -190,7 +190,7 @@ For $P A = L U$ with $L$ unit lower triangular:
 $$
 u_{ij} = a_{ij} - \sum_{k<i} l_{ik} u_{kj},
 \qquad
-l_{ij} = \frac{1}{u_{jj}}\Bigl(a_{ij} - \sum_{k<j} l_{ik} u_{kj}\Bigr)
+l_{ij} = \frac{1}{u_{jj}}\left(a_{ij} - \sum_{k<j} l_{ik} u_{kj}\right)
 $$
 
 A pivot is rejected when $|u_{jj}| \le \tau \lVert A \rVert_\infty$ (relative, not
@@ -217,7 +217,7 @@ For symmetric positive definite $A$:
 $$
 \ell_{jj} = \sqrt{a_{jj} - \sum_{k<j} \ell_{jk}^2},
 \qquad
-\ell_{ij} = \frac{1}{\ell_{jj}}\Bigl(a_{ij} - \sum_{k<j} \ell_{ik}\ell_{jk}\Bigr)
+\ell_{ij} = \frac{1}{\ell_{jj}}\left(a_{ij} - \sum_{k<j} \ell_{ik}\ell_{jk}\right)
 $$
 
 A negative radicand proves indefiniteness and is reported as
@@ -242,7 +242,7 @@ made.
 Zero the largest off-diagonal entry with a plane rotation $G(p,q,\theta)$ where
 
 $$
-\theta = \tfrac12 \operatorname{atan2}\!\left(2a_{pq},\; a_{qq} - a_{pp}\right),
+\theta = \tfrac12 \mathrm{atan2}\left(2a_{pq},\; a_{qq} - a_{pp}\right),
 $$
 
 accumulating $V \leftarrow VG$; the diagonal converges to the eigenvalues and the
