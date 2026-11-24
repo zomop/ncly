@@ -14,10 +14,10 @@ graph TD
     autodiff[ncly-autodiff<br/><i>dual numbers, tape</i>]
     linalg[ncly-linalg<br/><i>LU, QR, Cholesky, eigen</i>]
     sparse[ncly-sparse<br/><i>CSR, CSC</i>]
-    graph[ncly-graph<br/><i>DAG, shape inference, schedule</i>]
+    gph[ncly-graph<br/><i>DAG, shape inference, schedule</i>]
     compiler[ncly-compiler<br/><i>folding, CSE, DCE</i>]
     facade[ncly<br/><i>umbrella crate</i>]
-    python[ncly-python<br/><i>PyO3 extension</i>]
+    pyext[ncly-python<br/><i>PyO3 extension</i>]
 
     core --> tensor
     simd --> tensor
@@ -29,12 +29,12 @@ graph TD
     autodiff --> facade
     linalg --> facade
     sparse --> facade
-    facade --> python
-    autodiff --> python
-    linalg --> python
-    sparse --> python
-    tensor --> graph
-    graph --> compiler
+    facade --> pyext
+    autodiff --> pyext
+    linalg --> pyext
+    sparse --> pyext
+    tensor --> gph
+    gph --> compiler
 ```
 
 The dependency direction is strictly downwards. `ncly-core` depends on nothing,

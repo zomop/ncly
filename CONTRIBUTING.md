@@ -35,6 +35,9 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+# GitHub renders $…$ with KaTeX and diagrams with mermaid, both of which reject
+# things a local preview accepts. Run against every .md file:
+python3 scripts/check_docs.py
 # The examples are documented as runnable, so run them. The workspace manifest is
 # virtual, hence `-p ncly`.
 for example in tensors autodiff linalg sparse graph; do
@@ -42,7 +45,13 @@ for example in tensors autodiff linalg sparse graph; do
 done
 ```
 
-CI runs all of the above on every push, including the examples. Running them
+CI runs all of the above on every push, including the examples and the
+documentation check. Two Markdown bugs reached the front page before that check
+existed: a mermaid diagram that used `graph` (a diagram keyword) as a node id,
+which ended the diagram mid-way, and `\Bigl( … \Bigr)` in four formulas, which
+GitHub rejects as "Extra open brace or missing close brace". Neither is visible
+in a local preview, so `scripts/check_docs.py` looks for exactly those classes:
+banned macros, unbalanced delimiters, and reserved mermaid ids. Running them
 locally first is faster than waiting for the round trip, and an example that
 panics is a bug in the library as much as in the example: `examples/graph.rs`
 once failed at run time because the optimiser merged two distinct inputs.

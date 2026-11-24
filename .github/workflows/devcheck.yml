@@ -38,6 +38,11 @@ jobs:
             # output goes into the same log, because a red job with no visible
             # reason is worse than no job at all.
             echo "=== gates ==="
+            # Docs are checked first and cheaply: GitHub's math renderer rejects
+            # macros that a local preview accepts, so a broken formula ships
+            # silently. This catches the two classes that have actually happened.
+            python3 scripts/check_docs.py 2>&1 \
+              || { echo "GATE FAILED: docs render check"; status=1; }
             cargo build --workspace --all-targets --quiet 2>&1 \
               || { echo "GATE FAILED: cargo build"; status=1; }
             # Clippy is a gate, not just a diagnostic: it sat in the log pipeline

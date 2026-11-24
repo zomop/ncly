@@ -121,6 +121,16 @@ First functional release. Everything below is implemented and covered by tests.
 - `usize::is_multiple_of` (Rust 1.87) was used in the LU determinant sign, which
   broke the declared 1.75 MSRV; parity is now `% 2 == 0`, with the
   `manual_is_multiple_of` lint allowed and the conflict documented in the crate.
+- The README's architecture diagram used `graph` — a mermaid keyword — as a node
+  id, so the diagram stopped at that line with a parse error; the same mistake was
+  present in `docs/architecture.md`. Node ids are now `gph` and `pyext`.
+- Four formulas used `\Bigl(`/`\Bigr)`/`\operatorname`, which GitHub's math
+  renderer rejects ("Extra open brace or missing close brace", "The following
+  macros are not allowed"). Replaced with `\left(…\right)` and `\mathrm{…}`.
+- Added `scripts/check_docs.py`, which fails on banned macros, unbalanced
+  delimiters and reserved mermaid node ids in every `.md` file. It runs as a gate
+  in `devcheck` and as its own job in `ci.yml`; it found a third broken diagram
+  that had already shipped.
 - Clippy was wired as a log-only diagnostic in the development workflow rather
   than a gate, so two lints (a 101-line function and a by-reference 3-byte
   argument) reached the pull request. It is now a gate, and every CI job posts

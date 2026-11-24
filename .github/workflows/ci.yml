@@ -24,6 +24,34 @@ jobs:
       - run: rustup component add rustfmt
       - run: cargo fmt --all --check
 
+  docs:
+    name: docs render
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: docs
+    steps:
+      - uses: actions/checkout@v7
+      - name: check math and mermaid render on GitHub
+        run: |
+          set +e
+          python3 scripts/check_docs.py > /tmp/log.txt 2>&1
+          status=$?
+          python3 .github/ci/post_log.py /tmp/log.txt
+          cat /tmp/log.txt
+          if [ "$status" -ne 0 ]; then
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              echo "::error file=scripts/check_docs.py::${line//%/%%}"
+            done < /tmp/log.txt
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: log-docs
+          path: /tmp/log.txt
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest
