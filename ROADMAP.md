@@ -56,9 +56,22 @@ floating-point arithmetic, because `(a + b) + c` is not the same `f64` as
 | Fusion | **not implemented** | would need a fused kernel per pattern or a JIT; see below |
 
 Folding is conservative: it applies only when every operand is known, and it
-never reorders arithmetic. `Optimized::removed_dead` counts dead nodes in the
-*input* graph; a constant that disappears because the subgraph consuming it was
-folded is reported through `folded`, not through `removed_dead`.
+never reorders arithmetic. A folded subgraph collapses to a **single** baked leaf
+— if `exp(c)` only feeds `mul(exp(c), exp(c))` and that product is the folded
+value, the intermediate leaf is not rebuilt.
+
+Two details are easy to get wrong and are covered by regression tests:
+
+- **Leaves are not interchangeable.** Two `Input` nodes with the same shape but
+  different names carry different caller-supplied values, so CSE keys them by name.
+  Merging them produced a graph that could not be executed.
+- **Folding removes its own inputs.** After a subgraph is baked into a leaf,
+  whatever used to feed it is unreachable and is dropped from the rebuilt graph;
+  otherwise the caller would still have to supply a value for it.
+
+`Optimized::removed_dead` counts dead nodes in the *input* graph; a constant that
+disappears because the subgraph consuming it was folded is reported through
+`folded`, not through `removed_dead`.
 
 **Fusion is out of scope for now.** Emitting `exp → mul → sum` as one pass over
 memory requires either a fused kernel in `ncly-simd` for each supported pattern

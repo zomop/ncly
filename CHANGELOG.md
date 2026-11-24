@@ -120,6 +120,16 @@ First functional release. Everything below is implemented and covered by tests.
   real eigenvalues came back negated whenever the trace was negative.
 - Combining two `Variable`s from different tapes silently produced a wrong
   gradient; it is now a panic with an explanatory message.
+- Common-subexpression elimination merged distinct `Input` nodes: two leaves with
+  the same shape but different names hash to the same `(op, inputs)` signature,
+  which produced a graph that could not be executed (it asked for one input's
+  value in order to compute another). Leaves are now keyed by name.
+- Constant folding left the folded subgraph's inputs behind as unreachable nodes,
+  so a caller was still expected to supply values that nothing consumed. The
+  rebuilt graph now stops at folded leaves.
+- The graph example re-keyed only some of its inputs and failed at run time; every
+  example is now executed in CI, which is how that (and the two bugs above) were
+  found.
 - A `lib` name collision between `ncly` and the Python extension produced
   duplicate `libncly.rlib` output.
 

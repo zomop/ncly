@@ -115,8 +115,9 @@ assert_eq!(x.grad().to_vec(), vec![2.0, 4.0, 6.0]);
 
 - `ncly-graph`: append-only DAG with eager shape inference, level scheduling and
   checked execution
-- `ncly-compiler`: constant folding (baked leaf values), common-subexpression
-  elimination, dead-node elimination
+- `ncly-compiler`: constant folding (a folded subgraph collapses to one baked
+  leaf value), common-subexpression elimination, dead-node elimination —
+  exercised by running [`examples/graph.rs`](examples/graph.rs) in CI
 - Operator **fusion is not implemented** — there is no fused kernel or JIT, so
   `exp → mul → sum` still makes three passes over memory (see [Roadmap](#roadmap))
 

@@ -195,10 +195,20 @@ an empty value map, which is what makes constant folding a real optimisation
 rather than a bookkeeping change.
 
 `ncly-compiler` rebuilds the graph in one forward pass, applying, in order:
-constant folding, CSE (hash-consing `Signature { op, inputs }`), and dead-node
-elimination (reachability from the requested outputs). Rewrites are conservative:
-constant operands must *all* be known, and no pass reassociates floating-point
-arithmetic.
+constant folding, CSE (hash-consing `Signature { op, inputs, leaf }`), and
+dead-node elimination (reachability from the requested outputs). Rewrites are
+conservative: constant operands must *all* be known, and no pass reassociates
+floating-point arithmetic.
+
+The CSE key carries a `leaf: Option<String>` component for `Input` nodes only.
+That is not a detail: leaves with the same shape are not interchangeable, because
+each carries a value the caller supplies, and hashing them together merged
+distinct inputs into one node and produced an unexecutable graph. Every other op
+is a pure function of its operands, so its name plays no part in the key.
+
+Reachability for the rebuild stops at folded leaves, so an input that existed only
+to feed a folded subgraph is dropped rather than left behind as an unreachable
+node the caller would still have to supply.
 
 Operator fusion is **not** implemented: it needs a fused kernel per supported
 pattern or a JIT. See [`ROADMAP.md`](../ROADMAP.md).
