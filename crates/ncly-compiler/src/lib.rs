@@ -542,19 +542,20 @@ mod tests {
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
         // `exp` and `mul` fold; the add cannot, because `a` is an input.
         assert_eq!(result.folded, 2);
-        // Nodes: `a`, the baked leaf for `c`, the single folded leaf holding
-        // `exp(c)·exp(c)`, and the add. Both folded operations land in *one* leaf,
-        // because the inner `exp` is only reachable through the `mul`. No
-        // constant has to be supplied at run time.
+        // Nodes: `a`, one baked leaf holding `exp(c)·exp(c)`, and the add.
+        //
+        // Both folded operations land in a single leaf, because the inner `exp` is
+        // only reachable through the `mul`. `c` itself is gone: the only node that
+        // consumed it was folded away, so nothing needs its value. No constant has
+        // to be supplied at run time.
         assert_eq!(
             result.graph.len(),
-            graph.len() - 1,
+            graph.len() - 2,
             "{}",
             result.graph.describe()
         );
         assert_eq!(result.removed_dead, 0, "{}", result.graph.describe());
-        // `c` survives as a *baked* leaf with its own value, so the caller does
-        // not have to pass it again, and the folded product is a separate leaf.
+        // Exactly one node carries a baked value, and it is the folded product.
         let baked: Vec<&str> = result
             .graph
             .nodes()
@@ -562,9 +563,14 @@ mod tests {
             .filter(|node| node.value.is_some())
             .filter_map(|node| node.name.as_deref())
             .collect();
-        assert_eq!(
-            baked,
-            vec!["c", "mul[folded]"],
+        assert_eq!(baked, vec!["mul[folded]"], "{}", result.graph.describe());
+        // `c` is not in the optimised graph at all: its only consumer was folded.
+        assert!(
+            !result
+                .graph
+                .nodes()
+                .iter()
+                .any(|node| node.name.as_deref() == Some("c")),
             "{}",
             result.graph.describe()
         );
