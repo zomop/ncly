@@ -556,7 +556,10 @@ mod tests {
         real.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
         let expected = [-2.196_856, -2.196_856, -1.846_219, 0.640_739, 1.710_028];
         for (found, want) in real.iter().zip(expected) {
-            assert!((found - want).abs() < 1e-4, "found {real:?}, expected {expected:?}");
+            assert!(
+                (found - want).abs() < 1e-4,
+                "found {real:?}, expected {expected:?}"
+            );
         }
         // The trace must be reproduced exactly: the sum of the eigenvalues.
         let trace: f64 = (0..5).map(|i| a[i * 5 + i]).sum();
@@ -565,7 +568,10 @@ mod tests {
         assert!(values.iter().any(|v| v.1.abs() > 0.1), "{values:?}");
         // Conjugate pairs are reported in matching pairs.
         let imaginary: f64 = values.iter().map(|v| v.1).sum();
-        assert!(imaginary.abs() < 1e-9, "imaginary parts must cancel: {values:?}");
+        assert!(
+            imaginary.abs() < 1e-9,
+            "imaginary parts must cancel: {values:?}"
+        );
     }
 
     #[test]
