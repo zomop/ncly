@@ -314,8 +314,13 @@ fn benchmark_graph_optimiser() -> Vec<Measurement> {
     let optimised = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
     let optimised_out = NodeId(optimised.remap[&output.0]);
 
+    // The original graph needs `c` supplied at run time; the optimised one does
+    // not, because folding baked it into a leaf. That difference is part of what
+    // the benchmark is measuring.
     let mut values = HashMap::new();
     values.insert(x, Tensor::uniform([n], 22));
+    let mut plain_values = values.clone();
+    plain_values.insert(constant, constants[&constant].clone());
 
     let fold_report = format!(
         "folded={}, cse={}, dce={}",
@@ -328,8 +333,8 @@ fn benchmark_graph_optimiser() -> Vec<Measurement> {
         20,
         || {
             graph
-                .run(&[output], &values)
-                .map(|e| e.get(output).map(|t| t.sum()))
+                .run(&[output], &plain_values)
+                .map(|e| e.get(output).map(Tensor::sum))
         },
     );
     let folded = measure(
@@ -340,14 +345,14 @@ fn benchmark_graph_optimiser() -> Vec<Measurement> {
             optimised
                 .graph
                 .run(&[optimised_out], &values)
-                .map(|e| e.get(optimised_out).map(|t| t.sum()))
+                .map(|e| e.get(optimised_out).map(Tensor::sum))
         },
     );
 
     // The optimised run must produce the same number, otherwise the pass is not
     // semantics-preserving and the timing is meaningless.
     let reference = graph
-        .run(&[output], &values)
+        .run(&[output], &plain_values)
         .expect("plain run")
         .get(output)
         .expect("output")
@@ -363,6 +368,10 @@ fn benchmark_graph_optimiser() -> Vec<Measurement> {
         reference.to_vec(),
         candidate.to_vec(),
         "optimised graph must agree with the original"
+    );
+    assert!(
+        optimised.graph.run(&[optimised_out], &values).is_ok(),
+        "folding must remove the need for the constant input"
     );
 
     vec![plain, folded]
