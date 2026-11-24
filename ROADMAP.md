@@ -60,6 +60,10 @@ never reorders arithmetic. A folded subgraph collapses to a **single** baked lea
 — if `exp(c)` only feeds `mul(exp(c), exp(c))` and that product is the folded
 value, the intermediate leaf is not rebuilt.
 
+`constants` means "known at compile time", not "a value the caller still has to
+supply": every node with a known value is rebuilt as a leaf with that value baked
+in, so the optimised graph runs without those inputs at all.
+
 Two details are easy to get wrong and are covered by regression tests:
 
 - **Leaves are not interchangeable.** Two `Input` nodes with the same shape but
@@ -67,7 +71,8 @@ Two details are easy to get wrong and are covered by regression tests:
   Merging them produced a graph that could not be executed.
 - **Folding removes its own inputs.** After a subgraph is baked into a leaf,
   whatever used to feed it is unreachable and is dropped from the rebuilt graph;
-  otherwise the caller would still have to supply a value for it.
+  a constant whose every consumer folded disappears completely, rather than
+  lingering as a node nobody reads.
 
 `Optimized::removed_dead` counts dead nodes in the *input* graph; a constant that
 disappears because the subgraph consuming it was folded is reported through

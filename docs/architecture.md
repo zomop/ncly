@@ -206,9 +206,12 @@ each carries a value the caller supplies, and hashing them together merged
 distinct inputs into one node and produced an unexecutable graph. Every other op
 is a pure function of its operands, so its name plays no part in the key.
 
-Reachability for the rebuild stops at folded leaves, so an input that existed only
-to feed a folded subgraph is dropped rather than left behind as an unreachable
-node the caller would still have to supply.
+Reachability for the rebuild stops at nodes whose value is already known, so an
+input that existed only to feed a folded subgraph is dropped rather than left
+behind as an unreachable node the caller would still have to supply. Every known
+value — a caller-supplied constant as much as an evaluated operation — is rebuilt
+as a leaf with the value baked in, which is what lets the optimised graph run with
+an empty value map.
 
 Operator fusion is **not** implemented: it needs a fused kernel per supported
 pattern or a JIT. See [`ROADMAP.md`](../ROADMAP.md).

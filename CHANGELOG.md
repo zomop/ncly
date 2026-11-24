@@ -126,7 +126,9 @@ First functional release. Everything below is implemented and covered by tests.
   value in order to compute another). Leaves are now keyed by name.
 - Constant folding left the folded subgraph's inputs behind as unreachable nodes,
   so a caller was still expected to supply values that nothing consumed. The
-  rebuilt graph now stops at folded leaves.
+  rebuilt graph now stops at nodes whose value is known, and caller-supplied
+  constants are baked in as leaves too, so an optimised graph needs no constant
+  inputs.
 - The graph example re-keyed only some of its inputs and failed at run time; every
   example is now executed in CI, which is how that (and the two bugs above) were
   found.
