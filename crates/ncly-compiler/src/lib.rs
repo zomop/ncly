@@ -45,6 +45,7 @@
 #![warn(missing_debug_implementations)]
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::BuildHasher;
 use std::fmt;
 
 use ncly_core::{NclyError, Result};
@@ -128,6 +129,60 @@ impl Optimized {
     }
 }
 
+/// Values discovered for constant nodes, and which of them were computed here.
+#[derive(Default)]
+struct Folding {
+    /// Every constant node's value, including caller-supplied leaves.
+    known: HashMap<NodeId, Tensor>,
+    /// The nodes whose value was *computed* by this pass; these become leaves.
+    folded: HashSet<NodeId>,
+}
+
+/// Evaluate every subgraph whose operands are all known at compile time.
+///
+/// A node folds only when each of its operands is already constant, so an
+/// input-fed operand breaks the chain exactly as it should.
+fn fold_constants<S: BuildHasher>(
+    graph: &Graph,
+    live: &HashSet<NodeId>,
+    constants: &HashMap<NodeId, Tensor, S>,
+) -> Folding {
+    let mut folding = Folding::default();
+    // Nodes whose value is known before execution: a caller-supplied constant, or
+    // an operation whose operands are all in this set.
+    let mut constant: HashSet<NodeId> = HashSet::new();
+    for index in 0..graph.len() {
+        let id = NodeId(index);
+        if !live.contains(&id) {
+            continue;
+        }
+        let node = &graph.nodes()[index];
+        if let Some(value) = constants.get(&id) {
+            folding.known.insert(id, value.clone());
+            constant.insert(id);
+            continue;
+        }
+        if node.op == Op::Input {
+            continue;
+        }
+        if !node.inputs.iter().all(|parent| constant.contains(parent)) {
+            continue;
+        }
+        let operands: Option<Vec<Tensor>> = node
+            .inputs
+            .iter()
+            .map(|parent| folding.known.get(parent).cloned())
+            .collect();
+        let Some(operands) = operands else { continue };
+        if let Ok(value) = evaluate_constant(node, &operands) {
+            folding.known.insert(id, value);
+            constant.insert(id);
+            folding.folded.insert(id);
+        }
+    }
+    folding
+}
+
 /// Apply the requested passes to `graph` and return the optimised graph.
 ///
 /// The output list defines liveness: anything not reachable from an output is
@@ -142,11 +197,11 @@ pub fn optimize(graph: &Graph, outputs: &[NodeId], passes: &Passes) -> Optimized
 /// A node is constant when every reachable leaf below it is present in
 /// `constants`. Such a subgraph is evaluated once and replaced by a new leaf
 /// holding the result, which removes both the arithmetic and the temporaries.
-pub fn optimize_with_constants(
+pub fn optimize_with_constants<S: BuildHasher>(
     graph: &Graph,
     outputs: &[NodeId],
     passes: &Passes,
-    constants: &HashMap<NodeId, Tensor>,
+    constants: &HashMap<NodeId, Tensor, S>,
 ) -> Optimized {
     // --- 1. Liveness ------------------------------------------------------
     let live: HashSet<NodeId> = graph
@@ -159,48 +214,13 @@ pub fn optimize_with_constants(
     };
 
     // --- 2. Constant folding ---------------------------------------------
-    let mut known: HashMap<NodeId, Tensor> = HashMap::new();
-    // Nodes whose value is known before execution: a caller-supplied constant, or
-    // an operation whose operands are all in this set. `folded` is the subset that
-    // was *computed* here, which is what gets replaced by a leaf.
-    let mut constant: HashSet<NodeId> = HashSet::new();
-    let mut folded: HashSet<NodeId> = HashSet::new();
-    let mut folded_count = 0usize;
-    if passes.constant_folding {
-        for index in 0..graph.len() {
-            let id = NodeId(index);
-            if !live.contains(&id) {
-                continue;
-            }
-            let node = &graph.nodes()[index];
-            if let Some(value) = constants.get(&id) {
-                known.insert(id, value.clone());
-                constant.insert(id);
-                continue;
-            }
-            if node.op == Op::Input {
-                continue;
-            }
-            // Foldable only if *every* operand already has a known value, which
-            // requires each of them to be constant too — an input-fed operand is
-            // not, so it breaks the chain.
-            if node.inputs.iter().all(|parent| constant.contains(parent)) {
-                let operands: Option<Vec<Tensor>> = node
-                    .inputs
-                    .iter()
-                    .map(|parent| known.get(parent).cloned())
-                    .collect();
-                if let Some(operands) = operands {
-                    if let Ok(value) = evaluate_constant(node, &operands) {
-                        known.insert(id, value);
-                        constant.insert(id);
-                        folded.insert(id);
-                        folded_count += 1;
-                    }
-                }
-            }
-        }
-    }
+    let folding = if passes.constant_folding {
+        fold_constants(graph, &live, constants)
+    } else {
+        Folding::default()
+    };
+    let folded_count = folding.folded.len();
+    let (known, folded) = (folding.known, folding.folded);
 
     // --- 3. Rebuild with CSE ---------------------------------------------
     let mut rebuilt = Graph::new();
@@ -229,12 +249,11 @@ pub fn optimize_with_constants(
         let mut operands = Vec::with_capacity(node.inputs.len());
         let mut missing = false;
         for parent in &node.inputs {
-            match remap.get(&parent.0) {
-                Some(&new_parent) => operands.push(NodeId(new_parent)),
-                None => {
-                    missing = true;
-                    break;
-                }
+            if let Some(&new_parent) = remap.get(&parent.0) {
+                operands.push(NodeId(new_parent));
+            } else {
+                missing = true;
+                break;
             }
         }
         if missing {

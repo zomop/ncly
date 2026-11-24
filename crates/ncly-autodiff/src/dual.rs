@@ -357,18 +357,18 @@ mod tests {
     #[test]
     fn elementary_rules_match_finite_differences() {
         for x in [0.3, 1.0, 2.5, -1.7] {
-            check(|d| d.exp(), |v| v.exp(), x);
-            check(|d| d.sin(), |v| v.sin(), x);
-            check(|d| d.cos(), |v| v.cos(), x);
-            check(|d| d.tanh(), |v| v.tanh(), x);
-            check(|d| d.abs(), |v| v.abs(), x);
+            check(Dual::exp, f64::exp, x);
+            check(Dual::sin, f64::sin, x);
+            check(Dual::cos, f64::cos, x);
+            check(Dual::tanh, f64::tanh, x);
+            check(Dual::abs, f64::abs, x);
             check(|d| d * d, |v| v * v, x);
             check(|d| d.powi(3), |v| v.powi(3), x);
         }
         for x in [0.3, 1.0, 2.5] {
-            check(|d| d.ln(), |v| v.ln(), x);
-            check(|d| d.sqrt(), |v| v.sqrt(), x);
-            check(|d| d.recip(), |v| 1.0 / v, x);
+            check(Dual::ln, f64::ln, x);
+            check(Dual::sqrt, f64::sqrt, x);
+            check(Dual::recip, |v| 1.0 / v, x);
             check(|d| d.powf(1.5), |v| v.powf(1.5), x);
         }
     }

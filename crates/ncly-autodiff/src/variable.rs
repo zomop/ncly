@@ -774,7 +774,6 @@ impl Variable {
     }
 
     /// Sum one axis (removed from the result).
-    #[must_use]
     pub fn sum_axis(&self, axis: usize) -> Result<Variable> {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
@@ -787,7 +786,6 @@ impl Variable {
     }
 
     /// Sum several axes, keeping the listed ones.
-    #[must_use]
     pub fn sum_axes(&self, axes: &[usize]) -> Result<Variable> {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
@@ -817,7 +815,6 @@ impl Variable {
     ///
     /// Reshaping is a bijection on the element sequence, so its adjoint is
     /// another reshape — back to the parent's shape.
-    #[must_use]
     pub fn reshape(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target: Vec<usize> = shape.into();
@@ -834,7 +831,6 @@ impl Variable {
     ///
     /// The adjoint is un-reversed with the same permutation, which is what makes
     /// `(Aᵀ)ᵀ = A` hold in the backward pass.
-    #[must_use]
     pub fn transpose(&self) -> Result<Variable> {
         let value = self.value();
         let data = value.transpose().to_contiguous();
@@ -851,7 +847,6 @@ impl Variable {
     /// The adjoint is summed back down to the operand shape by
     /// the internal `sum_to_shape` helper, which is exactly the transpose
     /// of broadcasting.
-    #[must_use]
     pub fn broadcast_to(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target = Shape::new(shape.into());
@@ -865,7 +860,6 @@ impl Variable {
     }
 
     /// Matrix product of two 2-d variables.
-    #[must_use]
     pub fn matmul(&self, rhs: &Variable) -> Result<Variable> {
         let (a, b) = (self.value(), rhs.value());
         let data = a.matmul(&b)?;
@@ -1133,7 +1127,7 @@ mod tests {
         // and dL/dB = Aᵀ·1, i.e. every entry of dB is the sum of the matching
         // column of A. With A = [[1,2],[3,4]] that is [4, 6] in every row.
         assert_eq!(a.grad().to_vec(), vec![1.0; 4]);
-        assert_eq!(b.grad().to_vec(), vec![4.0, 6.0, 4.0, 6.0]);
+        assert_eq!(b.grad().to_vec(), vec![4.0, 4.0, 6.0, 6.0]);
     }
 
     #[test]
