@@ -44,7 +44,10 @@ def main() -> int:
     repo = os.environ.get("GITHUB_REPOSITORY")
     sha = os.environ.get("GITHUB_SHA")
     if not (token and repo and sha):
-        print("post_log: missing credentials, skipping upload")
+        print(
+            "post_log: missing credentials, skipping upload "
+            f"(token={bool(token)}, repo={repo!r}, sha={sha!r})"
+        )
         return 0
     body = log[-CHUNK * MAX_CHUNKS :]
     total = max(1, (len(body) + CHUNK - 1) // CHUNK)
@@ -58,7 +61,7 @@ def main() -> int:
                 f"{run_name} log {index + 1}/{total}\n```\n{chunk}\n```\n",
             )
         except Exception as exc:  # noqa: BLE001 - diagnostics only
-            print(f"post_log: upload failed: {exc!r}")
+            print(f"post_log: upload failed for {repo}@{sha[:8]}: {exc!r}")
             return 0
     print(f"post_log: uploaded {len(body)} chars in {total} chunk(s)")
     return 0

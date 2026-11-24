@@ -10,6 +10,8 @@ env:
   CARGO_TERM_COLOR: never
   RUSTFLAGS: -D warnings
 
+# Needed so each job can post its log to the commit: job logs are not retrievable
+# from the API for this repository, so the log has to travel with the commit.
 permissions:
   contents: write
 
@@ -25,16 +27,14 @@ jobs:
   clippy:
     name: clippy
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: clippy
     steps:
       - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
       - run: rustup component add clippy
       - name: clippy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Distinguishes the comment this job posts from the ones the other jobs
-          # post on the same commit.
-          CIRUN: clippy
         run: |
           set +e
           {
@@ -45,6 +45,11 @@ jobs:
           python3 .github/ci/post_log.py /tmp/log.txt
           tail -60 /tmp/log.txt
           exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-clippy
+          path: /tmp/log.txt
 
   test:
     name: test (${{ matrix.os }})
@@ -73,6 +78,11 @@ jobs:
           python3 .github/ci/post_log.py /tmp/log.txt
           tail -80 /tmp/log.txt
           exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-test-${{ matrix.os }}
+          path: /tmp/log.txt
 
   msrv:
     name: minimum supported Rust
@@ -94,3 +104,8 @@ jobs:
           python3 .github/ci/post_log.py /tmp/log.txt
           tail -60 /tmp/log.txt
           exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-msrv
+          path: /tmp/log.txt
