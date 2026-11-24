@@ -290,22 +290,24 @@ pub fn eigenvalues(a: &[f64], n: usize) -> Result<Vec<(f64, f64)>> {
                 residual: None,
             });
         }
-        // Shift by the eigenvalue of the trailing 2×2 block closest to the
-        // bottom-right corner (Wilkinson shift).
-        let (r1, i1, r2, i2) = two_by_two(&h, n, high as usize - 1);
-        let candidate = if i1 == 0.0 {
-            let d1 = (r1 - h[high as usize * n + high as usize]).abs();
-            let d2 = (r2 - h[high as usize * n + high as usize]).abs();
-            let other = if d1 < d2 { r2 } else { r1 };
-            (r1 + r2 - other, 0.0)
+        // Wilkinson shift: the eigenvalue of the trailing 2×2 block that is
+        // closest to the bottom-right corner.
+        //
+        // When the trailing block has a complex pair there is no good real shift;
+        // the real part is used instead, which is the standard fallback for a
+        // real-arithmetic QR iteration. Convergence is slower in that case but the
+        // block is deflated by the 2×2 branch above as soon as it decouples.
+        let (r1, i1, r2, _i2) = two_by_two(&h, n, high as usize - 1);
+        let shift = if i1 == 0.0 {
+            let corner = h[high as usize * n + high as usize];
+            if (r1 - corner).abs() < (r2 - corner).abs() {
+                r1
+            } else {
+                r2
+            }
         } else {
-            (r1, i1)
+            r1
         };
-        let _ = i2;
-
-        // A real shift keeps the matrix real; for a complex pair we use the
-        // real part twice, which still converges (slower) for the real block.
-        let shift = candidate.0;
         for i in low as usize..=high as usize {
             h[i * n + i] -= shift;
         }
@@ -505,6 +507,7 @@ mod tests {
         // Rotation by 90°: eigenvalues ±i.
         let a = [0.0, -1.0, 1.0, 0.0];
         let values = eigenvalues(&a, 2).unwrap();
+        assert_eq!(values.len(), 2, "must return exactly n eigenvalues: {values:?}");
         let mut imaginary: Vec<f64> = values.iter().map(|v| v.1.abs()).collect();
         imaginary.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert!((imaginary[0] - 1.0).abs() < 1e-9, "{values:?}");

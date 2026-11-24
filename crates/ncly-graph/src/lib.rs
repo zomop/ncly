@@ -61,7 +61,8 @@ impl fmt::Display for NodeId {
 /// Every variant has a closed-form shape rule, applied by [`Graph::add_node`].
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Op {
-    /// A leaf value supplied by the caller.
+    /// A leaf value supplied by the caller, or — after constant folding — a
+    /// leaf whose `value` is baked into the node.
     Input,
     /// Element-wise addition with broadcasting.
     Add,
@@ -158,6 +159,11 @@ pub struct Node {
     pub shape: Vec<usize>,
     /// Optional name, set for graph inputs and used in dumps.
     pub name: Option<String>,
+    /// A value that is known without executing anything.
+    ///
+    /// Only [`Op::Input`] nodes carry one: the optimiser (`ncly-compiler`) folds
+    /// constant subgraphs by replacing them with such a leaf.
+    pub value: Option<Tensor>,
 }
 
 impl Node {
@@ -224,14 +230,31 @@ impl Graph {
             inputs: Vec::new(),
             shape,
             name: Some(name.into()),
+            value: None,
         });
         NodeId(self.nodes.len() - 1)
     }
 
-    /// Add a constant leaf whose value is baked into the node.
+    /// Add a leaf whose value is stored in the node.
     ///
-    /// Constants are ordinary `Input` nodes; the distinction lives in the
-    /// caller's value map.
+    /// Used by the optimiser to replace a folded subgraph; `run` then supplies the
+    /// value automatically, so no entry in the value map is needed.
+    pub fn folded_leaf(&mut self, shape: impl Into<Vec<usize>>, value: Tensor, name: impl Into<String>) -> NodeId {
+        let shape: Vec<usize> = shape.into();
+        self.nodes.push(Node {
+            op: Op::Input,
+            inputs: Vec::new(),
+            shape,
+            name: Some(name.into()),
+            value: Some(value),
+        });
+        NodeId(self.nodes.len() - 1)
+    }
+
+    /// Add a constant leaf whose value is supplied at execution time.
+    ///
+    /// This is plain [`Graph::input`]; the name exists to make intent explicit at
+    /// call sites that assemble a graph from known constants.
     pub fn constant(&mut self, tensor: &Tensor, name: impl Into<String>) -> NodeId {
         self.input(tensor.shape().dims().to_vec(), name)
     }
@@ -267,6 +290,7 @@ impl Graph {
             inputs: inputs.to_vec(),
             shape,
             name: None,
+            value: None,
         });
         Ok(NodeId(self.nodes.len() - 1))
     }
@@ -387,12 +411,17 @@ impl Graph {
         for &id in &schedule.order {
             let node = self.node(id)?;
             let output = if node.op == Op::Input {
-                values.get(&id).cloned().ok_or_else(|| NclyError::Graph {
-                    reason: format!(
-                        "no value supplied for input {}",
-                        node.name.as_deref().unwrap_or("(unnamed)")
-                    ),
-                })?
+                match node.value.clone().or_else(|| values.get(&id).cloned()) {
+                    Some(value) => value,
+                    None => {
+                        return Err(NclyError::Graph {
+                            reason: format!(
+                                "no value supplied for input {}",
+                                node.name.as_deref().unwrap_or("(unnamed)")
+                            ),
+                        })
+                    }
+                }
             } else {
                 evaluate(&node.op, &node.inputs, &environment)?
             };
@@ -411,6 +440,11 @@ impl Graph {
             schedule,
             values: environment,
         })
+    }
+
+    /// The value baked into a leaf, if any.
+    pub fn baked_value(&self, id: NodeId) -> Option<&Tensor> {
+        self.nodes.get(id.0).and_then(|node| node.value.as_ref())
     }
 
     /// A human-readable dump, one node per line, in topological order.

@@ -150,7 +150,7 @@ fn benchmark_axpy() -> Measurement {
     let a = vec![1.5f64; n];
     let b = vec![0.5f64; n];
     let mut out = vec![0.0f64; n];
-    measure("axpy (y = 2a + b)", format!("n=2^20"), 50, || {
+    measure("axpy (y = 2a + b)", "n=2^20".to_string(), 50, || {
         ncly_simd::axpy(&mut out, 2.0, &a, 1, &b, 1);
         out[0]
     })
@@ -161,7 +161,7 @@ fn benchmark_elementwise_add() -> Measurement {
     let n = 1 << 20;
     let a = Tensor::uniform([n], 1);
     let b = Tensor::uniform([n], 2);
-    measure("tensor add (1-d)", format!("n=2^20"), 50, || {
+    measure("tensor add (1-d)", "n=2^20".to_string(), 50, || {
         a.add(&b).map(|t| t.sum())
     })
     .pipe(|m| with_bytes(with_flops(m, n as f64), 3 * n * 8))
@@ -170,14 +170,14 @@ fn benchmark_elementwise_add() -> Measurement {
 fn benchmark_exp() -> Measurement {
     let n = 1 << 20;
     let a = Tensor::uniform([n], 3);
-    measure("exp (1-d)", format!("n=2^20"), 30, || a.exp().sum())
+    measure("exp (1-d)", "n=2^20".to_string(), 30, || a.exp().sum())
         .pipe(|m| with_bytes(with_flops(m, 8.0 * n as f64), 2 * n * 8))
 }
 
 fn benchmark_sum() -> Measurement {
     let n = 1 << 20;
     let a = Tensor::uniform([n], 4);
-    measure("sum (1-d)", format!("n=2^20"), 50, || a.sum())
+    measure("sum (1-d)", "n=2^20".to_string(), 50, || a.sum())
         .pipe(|m| with_bytes(with_flops(m, n as f64), n * 8))
 }
 
@@ -286,14 +286,12 @@ fn print_table(results: &[Measurement]) {
     println!("| kernel | size | median | best | GFLOP/s | GiB/s |");
     println!("| --- | --- | ---: | ---: | ---: | ---: |");
     for measurement in results {
-        let gflops = measurement
-            .gflops()
-            .map(|g| format!("{g:.2}"))
-            .unwrap_or_else(|| "—".to_string());
+        // `map_or_else` instead of `map(..).unwrap_or_else(..)`: the formatter is
+        // only paid for when there is a value to show.
+        let gflops = measurement.gflops().map_or_else(|| "—".to_string(), |g| format!("{g:.2}"));
         let bandwidth = measurement
             .gib_per_second()
-            .map(|g| format!("{g:.2}"))
-            .unwrap_or_else(|| "—".to_string());
+            .map_or_else(|| "—".to_string(), |g| format!("{g:.2}"));
         println!(
             "| {} | {} | {:.3} ms | {:.3} ms | {} | {} |",
             measurement.name,

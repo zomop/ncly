@@ -235,13 +235,16 @@ pub fn optimize_with_constants<S: BuildHasher>(
         }
         let node = &graph.nodes()[index];
 
-        // A folded node becomes a fresh leaf holding its value.
+        // A folded node becomes a leaf whose value is baked into the node, so the
+        // rewritten graph can be executed with no extra inputs.
         if folded.contains(&id) {
-            let value = &known[&id];
-            let new_id = match node.name.as_deref() {
-                Some(name) => rebuilt.constant(value, format!("{name}[folded]")),
-                None => rebuilt.constant(value, format!("{}[folded]", node.op.name())),
+            let value = known[&id].clone();
+            let shape = value.shape().dims().to_vec();
+            let name = match node.name.as_deref() {
+                Some(name) => format!("{name}[folded]"),
+                None => format!("{}[folded]", node.op.name()),
             };
+            let new_id = rebuilt.folded_leaf(shape, value, name);
             remap.insert(index, new_id.0);
             continue;
         }
@@ -427,12 +430,12 @@ mod tests {
         let mut constants = HashMap::new();
         constants.insert(constant, Tensor::from_vec(vec![0.0, 1.0], [2]).unwrap());
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
-        // `exp` and `mul` fold, so the add now reads `a` and a single folded leaf.
-        // The add itself cannot fold because `a` is an input.
+        // `exp` and `mul` fold; the add cannot, because `a` is an input.
         assert_eq!(result.folded, 2);
-        // Nodes: a, folded `exp`, folded `mul` (merged by CSE into one leaf),
-        // then the surviving add. The caller-supplied constant `c` is dead.
-        assert_eq!(result.graph.len(), 3, "{}", result.graph.describe());
+        // Nodes: a, the folded `exp` leaf, the folded `mul` leaf, the add. Baked
+        // leaves are distinct from each other by construction, so `mul` is not
+        // merged into `exp`; the caller-supplied constant `c` is dead.
+        assert_eq!(result.graph.len(), 4, "{}", result.graph.describe());
         assert_eq!(result.removed_dead, 1);
 
         // Numerical check: the folded leaf equals exp(c) * exp(c).
@@ -440,6 +443,7 @@ mod tests {
         values.insert(a, Tensor::from_vec(vec![1.0, 2.0], [2]).unwrap());
         let expected = 1.0 + (0.0f64.exp() * 0.0f64.exp());
         let out = NodeId(result.remap[&output.0]);
+        // Only `a` needs a value: the folded leaf carries its own.
         let execution = result.graph.run(&[out], &values).unwrap();
         let actual = execution.get(out).unwrap().get(&[0]).unwrap();
         assert!((actual - expected).abs() < 1e-15, "{actual} vs {expected}");

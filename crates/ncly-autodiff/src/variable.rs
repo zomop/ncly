@@ -1060,7 +1060,8 @@ mod tests {
 
     #[test]
     fn elementary_gradients() {
-        let cases: Vec<(&str, fn(&Variable) -> Variable, f64, f64)> = vec![
+        type Case = (&'static str, fn(&Variable) -> Variable, f64, f64);
+        let cases: Vec<Case> = vec![
             ("exp", |v| v.exp(), 1.0, std::f64::consts::E),
             ("ln", |v| v.ln(), 2.0, 0.5),
             ("sqrt", |v| v.sqrt(), 4.0, 0.25),

@@ -13,7 +13,7 @@
 //! signal that the rule itself is wrong rather than its implementation.
 
 use ncly_autodiff::{ops, Dual, Tape, Variable};
-use ncly_integration_tests::{assert_close, central_difference, max_abs_diff, Rng};
+use ncly_integration_tests::{assert_close, central_difference, fd_step, max_abs_diff, Rng};
 use ncly_tensor::Tensor;
 
 /// Tolerance for analytic-vs-analytic comparisons (bit-level agreement expected).
@@ -33,7 +33,7 @@ fn scalar_compositions_match_finite_differences() {
     let cases: Vec<(&str, fn(Dual) -> Dual, fn(f64) -> f64)> = vec![
         ("x^2 + 3x", |d| d * d + 3.0f64 * d, |x| x * x + 3.0 * x),
         ("sin(x)cos(x)", |d| d.sin() * d.cos(), |x| x.sin() * x.cos()),
-        ("exp(-x^2)", |d| -(d * d).exp(), |x| -(x * x).exp()),
+        ("exp(-x^2)", |d| (d * d).neg().exp(), |x| (-(x * x)).exp()),
         (
             "ln(1+x^2)",
             |d| (1.0f64 + d * d).ln(),
@@ -137,16 +137,19 @@ fn tensor_gradients_match_finite_differences_elementwise() {
     drop(guard);
 
     let scalar = |data: &[f64]| -> f64 { data.iter().map(|&v| v.exp() * v.sin() * v).sum() };
+    // The step must be the error-balanced one (`eps^(1/3)`), not a function of
+    // the comparison tolerance: `h = tol^(1/3)` would leave an `h^2` truncation
+    // error far larger than the tolerance being tested.
     let mut numeric = vec![0.0; values.len()];
     for index in 0..values.len() {
-        let h = NUMERIC.cbrt() * values[index].abs().max(1.0);
+        let h = fd_step(values[index]);
         let mut plus = values.clone();
         plus[index] += h;
         let mut minus = values.clone();
         minus[index] -= h;
         numeric[index] = (scalar(&plus) - scalar(&minus)) / (2.0 * h);
     }
-    assert_close(&gradient, &numeric, NUMERIC * 20.0, "tensor gradient");
+    assert_close(&gradient, &numeric, NUMERIC, "tensor gradient");
 }
 
 #[test]
