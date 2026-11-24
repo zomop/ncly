@@ -14,7 +14,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: build, fmt, test
         run: |
+          # Every gate runs even after an earlier one fails, so one log holds all
+          # the evidence; the accumulated status decides the job result at the end.
           set +e
+          status=0
           {
             rustc --version
             echo "=== cargo build ==="
@@ -27,28 +30,35 @@ jobs:
             echo "=== cargo test ==="
             # `--no-fail-fast` so every failing test in every crate is reported,
             # `--nocapture` so the assertion values are visible.
-            cargo test --workspace --no-fail-fast -- --nocapture 2>&1 | grep -E -A 14 '^---- |^test result: FAILED|^error\[|panicked at' | head -200
-            echo "=== cargo doc (deny warnings) ==="
-            RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps 2>&1 | grep -E "^error|^warning" | head -30
+            cargo test --workspace --no-fail-fast -- --nocapture 2>&1 \
+              | grep -E -A 14 '^---- |^test result: FAILED|^error\[|panicked at' | head -200
+
+            # The gates below are what actually decides the job result. Their
+            # output goes into the same log, because a red job with no visible
+            # reason is worse than no job at all.
+            echo "=== gates ==="
+            cargo build --workspace --all-targets --quiet 2>&1 \
+              || { echo "GATE FAILED: cargo build"; status=1; }
+            cargo test --workspace --quiet 2>&1 \
+              || { echo "GATE FAILED: cargo test"; status=1; }
+            RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet 2>&1 \
+              || { echo "GATE FAILED: cargo doc"; status=1; }
+
+            # The README calls the examples "runnable", so they are run: compiling
+            # is not enough, a panicking example still builds. `-p ncly` is required
+            # because this is a virtual workspace manifest and the examples are
+            # declared in that package.
+            for example in tensors autodiff linalg sparse graph; do
+              echo "--- example: $example"
+              cargo run --quiet --release -p ncly --example "$example" 2>&1 \
+                || { echo "GATE FAILED: example $example"; status=1; }
+            done
+            echo "gates status: $status"
           } > /tmp/log.txt 2>&1
-          # The diagnostic pipeline above runs under `set +e` so the whole log is
-          # always produced and uploaded. The gates are then re-run so that a
-          # failing build, test or doc job fails the job instead of passing
-          # quietly; the log is uploaded *before* they run, so a red job still
-          # leaves its output on the commit.
+          # Upload before exiting, so a red job still leaves its output on the commit.
           python3 .github/ci/post_log.py /tmp/log.txt
-          tail -25 /tmp/log.txt
-          cargo build --workspace --all-targets --quiet || exit 1
-          cargo test --workspace --quiet || exit 1
-          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet || exit 1
-          # The README calls these files "runnable", so they are actually run.
-          # Compiling is not enough: a panicking example still builds. `-p ncly` is
-          # required because this is a virtual workspace manifest, and the examples
-          # are declared in that package.
-          for example in tensors autodiff linalg sparse graph; do
-            echo "running example: $example"
-            cargo run --quiet --release -p ncly --example "$example" > /dev/null || exit 1
-          done
+          tail -60 /tmp/log.txt
+          exit "$status"
   python:
     runs-on: ubuntu-latest
     env:

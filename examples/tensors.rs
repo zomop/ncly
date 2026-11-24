@@ -29,7 +29,11 @@ fn main() -> Result<(), NclyError> {
     println!("column sums = {:?}", grid.sum_axis(0)?.to_vec());
 
     // Element-wise math composes on views, not only on contiguous buffers.
-    let smooth = grid.ln().mul(&grid.sqrt())?;
-    println!("ln(x)*sqrt(x) sum = {}", smooth.sum());
+    // The shift matters: `grid` starts at 0, and `ln(0)` is `-inf`, so taking the
+    // logarithm of the raw grid would print `NaN` and demonstrate nothing.
+    let positive = grid.adds(1.0);
+    let smooth = positive.ln().mul(&positive.sqrt())?;
+    assert!(smooth.all_finite(), "every element must be finite");
+    println!("ln(1+x)*sqrt(1+x) sum = {}", smooth.sum());
     Ok(())
 }
