@@ -17,8 +17,12 @@
 //! number that was not produced by this program on the machine that reports it.
 //!
 //! ```text
-//! cargo run --release -p ncly-benchmarks -- [filter]
+//! cargo run --release -p ncly-benchmarks -- [filter] [--json]
 //! ```
+//!
+//! `--json` emits one JSON object per case instead of the Markdown table, for
+//! tooling that wants to diff runs. The JSON is written by hand — the runner has
+//! no dependencies — so it is deliberately flat.
 
 use ncly_compiler::{optimize_with_constants, Passes};
 use ncly_graph::{Graph, NodeId, Op};
@@ -97,19 +101,73 @@ fn with_bytes(mut measurement: Measurement, bytes: usize) -> Measurement {
     measurement
 }
 
+/// Escape a string for embedding in the hand-written JSON output.
+fn json_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+fn print_json(results: &[Measurement]) {
+    println!("{{");
+    println!(
+        "  \"kernel\": \"{}\",",
+        json_escape(ncly_simd::active_kernel().name())
+    );
+    println!("  \"cases\": [");
+    for (index, measurement) in results.iter().enumerate() {
+        let comma = if index + 1 == results.len() { "" } else { "," };
+        println!("    {{");
+        println!("      \"name\": \"{}\",", json_escape(measurement.name));
+        println!("      \"size\": \"{}\",", json_escape(&measurement.size));
+        println!(
+            "      \"median_ms\": {:.6},",
+            measurement.median.as_secs_f64() * 1e3
+        );
+        println!(
+            "      \"best_ms\": {:.6},",
+            measurement.best.as_secs_f64() * 1e3
+        );
+        match measurement.gflops() {
+            Some(value) => println!("      \"gflops\": {value:.4},"),
+            None => println!("      \"gflops\": null,"),
+        }
+        match measurement.gib_per_second() {
+            Some(value) => println!("      \"gib_per_second\": {value:.4}"),
+            None => println!("      \"gib_per_second\": null"),
+        }
+        println!("    }}{comma}");
+    }
+    println!("  ]");
+    println!("}}");
+}
+
 fn main() {
-    let filter: Option<String> = std::env::args().nth(1);
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let json = arguments.iter().any(|argument| argument == "--json");
+    let filter: Option<String> = arguments
+        .into_iter()
+        .find(|argument| !argument.starts_with("--"));
     let mut results: Vec<Measurement> = Vec::new();
     let want = |name: &str| match &filter {
         Some(pattern) => name.contains(pattern.as_str()),
         None => true,
     };
 
-    println!("# NCLY benchmark results");
-    println!();
-    println!("kernel: `{}`", ncly_simd::active_kernel().name());
-    println!("rustc: {}", rustc_version());
-    println!();
+    if !json {
+        println!("# NCLY benchmark results");
+        println!();
+        println!("kernel: `{}`", ncly_simd::active_kernel().name());
+        println!("rustc: {}", rustc_version());
+        println!();
+    }
 
     if want("axpy") {
         results.push(benchmark_axpy());
@@ -142,7 +200,11 @@ fn main() {
         results.extend(benchmark_graph_optimiser());
     }
 
-    print_table(&results);
+    if json {
+        print_json(&results);
+    } else {
+        print_table(&results);
+    }
 }
 
 fn rustc_version() -> String {
