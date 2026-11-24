@@ -13,6 +13,8 @@ ncly-tensor = { workspace = true }
 ncly-autodiff = { workspace = true }
 ncly-linalg = { workspace = true }
 ncly-sparse = { workspace = true }
+ncly-graph = { workspace = true }
+ncly-compiler = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
