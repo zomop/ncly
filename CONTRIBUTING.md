@@ -35,7 +35,17 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+# The examples are documented as runnable, so run them. The workspace manifest is
+# virtual, hence `-p ncly`.
+for example in tensors autodiff linalg sparse graph; do
+  cargo run --quiet --release -p ncly --example "$example" || exit 1
+done
 ```
+
+CI runs all of the above on every push, including the examples. Running them
+locally first is faster than waiting for the round trip, and an example that
+panics is a bug in the library as much as in the example: `examples/graph.rs`
+once failed at run time because the optimiser merged two distinct inputs.
 
 For changes that touch the Python bindings:
 
@@ -58,6 +68,8 @@ therefore needs **evidence**, not just code:
 | New gradient rule | A finite-difference comparison *and* a forward-vs-reverse comparison |
 | Kernel/vectorisation change | Bit-exactness against the scalar path, plus a benchmark number |
 | Layout/broadcast change | A test against an independent reference implementation of broadcasting |
+| Graph/optimiser change | A test that the optimised graph reproduces the unoptimised result, plus a count of what each pass removed |
+| New example | It must be run, not just compiled — CI does this for every example in `examples/` |
 | New error path | A test that asserts the specific error variant is returned |
 
 Tolerances must be justified. "Loosen the tolerance until it passes" is not a
