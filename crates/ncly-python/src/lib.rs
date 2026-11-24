@@ -1,8 +1,8 @@
 //! Python bindings for NCLY.
 //!
 //! The extension module is named `ncly` and is built with maturin. It exposes a
-//! small, explicit API: a [`Tensor`] class for data and element-wise math, a
-//! [`GradTensor`] participating in reverse-mode differentiation, and module level
+//! small, explicit API: a `Tensor` class for data and element-wise math, a
+//! `GradTensor` participating in reverse-mode differentiation, and module level
 //! helpers for linear algebra and sparse formats.
 //!
 //! # Error mapping
@@ -301,7 +301,7 @@ impl PyTensor {
     /// Mark this tensor as requiring gradients and return a graph handle.
     ///
     /// The returned object supports arithmetic and a `backward()` call; see
-    /// [`GradTensor`].
+    /// `GradTensor`.
     fn requires_grad(&self) -> PyGradTensor {
         PyGradTensor::from_tensor(self.inner.clone())
     }

@@ -430,6 +430,7 @@ impl CsrMatrix {
     }
 
     /// Multiply every stored value by `scalar`.
+    #[must_use]
     pub fn scale(&self, scalar: f64) -> CsrMatrix {
         CsrMatrix::from_parts_unchecked(
             self.rows,
@@ -441,6 +442,7 @@ impl CsrMatrix {
     }
 
     /// Apply `f` to every stored value.
+    #[must_use]
     pub fn map_values(&self, f: impl Fn(f64) -> f64) -> CsrMatrix {
         CsrMatrix::from_parts_unchecked(
             self.rows,
@@ -498,13 +500,18 @@ impl CsrMatrix {
 }
 
 impl fmt::Debug for CsrMatrix {
+    /// Prints the shape and nnz rather than every stored index.
+    ///
+    /// The three compressed arrays are elided on purpose — dumping an `n`-entry
+    /// `row_ptr` in every log line is unreadable — but their *contents* are
+    /// summarised by `nnz` and `density`, so the output is not misleading.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CsrMatrix")
             .field("rows", &self.rows)
             .field("cols", &self.cols)
             .field("nnz", &self.nnz())
             .field("density", &self.density())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

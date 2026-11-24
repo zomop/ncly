@@ -4,9 +4,9 @@
 //!
 //! | Pass | What it removes | Why it is safe |
 //! | --- | --- | --- |
-//! | [`fold`] | subgraphs with only constant inputs | floating-point evaluation is deterministic for a fixed order of operations |
-//! | [`eliminate_common`] | repeated `(op, operands)` pairs | the operation is pure: same operands, same result |
-//! | [`eliminate_dead`] | nodes with no path to an output | they cannot affect the result |
+//! | constant folding | subgraphs with only constant inputs | floating-point evaluation is deterministic for a fixed order of operations |
+//! | common-subexpression elimination | repeated `(op, operands)` pairs | every operation is pure: same operands, same result |
+//! | dead-node elimination | nodes with no path to an output | they cannot affect the result |
 //!
 //! Every pass is **conservative**: a rewrite is applied only when it is exactly
 //! semantics-preserving. In particular no pass reassociates floating-point
@@ -375,7 +375,7 @@ mod tests {
         values.insert(a, Tensor::from_vec(vec![0.0, 1.0, 2.0], [3]).unwrap());
         let before = graph.run(&[sum], &values).unwrap();
         let rewritten_sum = NodeId(result.remap[&sum.0]);
-        let after_input = result.graph.nodes()[0];
+        let after_input = &result.graph.nodes()[0];
         assert_eq!(after_input.op, Op::Input);
         let after = result
             .graph

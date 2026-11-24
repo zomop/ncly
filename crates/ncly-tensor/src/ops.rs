@@ -446,7 +446,7 @@ pub(crate) fn reduce_all(input: &Tensor, op: ReduceOp) -> f64 {
             });
             let sum = total + compensation;
             if op == ReduceOp::Mean {
-                if input.len() == 0 {
+                if input.is_empty() {
                     f64::NAN
                 } else {
                     sum / input.len() as f64
@@ -514,6 +514,7 @@ impl Tensor {
     }
 
     /// Multiply every element by a scalar.
+    #[must_use]
     pub fn muls(&self, scalar: f64) -> Tensor {
         let mut out = Vec::with_capacity(self.len());
         self.for_each_flat(|flat| out.push(self.storage[flat] * scalar));
@@ -521,6 +522,7 @@ impl Tensor {
     }
 
     /// Add a scalar to every element.
+    #[must_use]
     pub fn adds(&self, scalar: f64) -> Tensor {
         let mut out = Vec::with_capacity(self.len());
         self.for_each_flat(|flat| out.push(self.storage[flat] + scalar));
@@ -528,46 +530,55 @@ impl Tensor {
     }
 
     /// Apply a unary operation element-wise.
+    #[must_use]
     pub fn unary(&self, op: UnaryOp) -> Tensor {
         unary(self, op)
     }
 
     /// `e^x` element-wise.
+    #[must_use]
     pub fn exp(&self) -> Tensor {
         unary(self, UnaryOp::Exp)
     }
 
     /// Natural logarithm element-wise.
+    #[must_use]
     pub fn ln(&self) -> Tensor {
         unary(self, UnaryOp::Ln)
     }
 
     /// Square root element-wise.
+    #[must_use]
     pub fn sqrt(&self) -> Tensor {
         unary(self, UnaryOp::Sqrt)
     }
 
     /// Sine element-wise.
+    #[must_use]
     pub fn sin(&self) -> Tensor {
         unary(self, UnaryOp::Sin)
     }
 
     /// Cosine element-wise.
+    #[must_use]
     pub fn cos(&self) -> Tensor {
         unary(self, UnaryOp::Cos)
     }
 
     /// Hyperbolic tangent element-wise.
+    #[must_use]
     pub fn tanh(&self) -> Tensor {
         unary(self, UnaryOp::Tanh)
     }
 
     /// Absolute value element-wise.
+    #[must_use]
     pub fn abs(&self) -> Tensor {
         unary(self, UnaryOp::Abs)
     }
 
     /// `x^p` element-wise.
+    #[must_use]
     pub fn powf(&self, p: f64) -> Tensor {
         unary(self, UnaryOp::Powf(p))
     }

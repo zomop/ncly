@@ -57,6 +57,65 @@ impl Eigen {
     }
 }
 
+
+/// Relative symmetry check for a dense row-major matrix.
+///
+/// The Jacobi iteration assumes symmetry; without this check an asymmetric input
+/// would silently converge to the eigenvalues of its symmetric part.
+fn check_symmetric(a: &[f64], n: usize) -> Result<()> {
+    for i in 0..n {
+        for j in i + 1..n {
+            let lhs = a[i * n + j];
+            let rhs = a[j * n + i];
+            let scale = lhs.abs().max(rhs.abs()).max(1.0);
+            if (lhs - rhs).abs() > 1e-12 * scale {
+                return Err(NclyError::invalid_shape(
+                    "eigen::symmetric",
+                    format!("matrix is not symmetric at ({i}, {j})"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Frobenius norm of the strictly upper triangle: the quantity a Jacobi sweep
+/// drives to zero.
+fn off_diagonal_norm(m: &[f64], n: usize) -> f64 {
+    let mut total = 0.0f64;
+    for i in 0..n {
+        for j in i + 1..n {
+            total += m[i * n + j] * m[i * n + j];
+        }
+    }
+    total.sqrt()
+}
+
+/// Apply the plane rotation `G(p, q, θ)` to `A` and accumulate it into `V`.
+///
+/// The row pass computes `A·G` and the column pass `Gᵀ·(A·G)`; `V` accumulates
+/// `V·G` so that, at convergence, `A = V Λ Vᵀ`.
+fn apply_rotation(m: &mut [f64], v: &mut [f64], n: usize, p: usize, q: usize, c: f64, s: f64) {
+    for k in 0..n {
+        let mkp = m[k * n + p];
+        let mkq = m[k * n + q];
+        m[k * n + p] = c * mkp - s * mkq;
+        m[k * n + q] = s * mkp + c * mkq;
+    }
+    for k in 0..n {
+        let mpk = m[p * n + k];
+        let mqk = m[q * n + k];
+        m[p * n + k] = c * mpk - s * mqk;
+        m[q * n + k] = s * mpk + c * mqk;
+    }
+    for k in 0..n {
+        let vkp = v[k * n + p];
+        let vkq = v[k * n + q];
+        v[k * n + p] = c * vkp - s * vkq;
+        v[k * n + q] = s * vkp + c * vkq;
+    }
+}
+
 /// Cyclic Jacobi eigen decomposition of a real symmetric matrix.
 ///
 /// # Errors
@@ -76,21 +135,7 @@ pub fn symmetric_with_tolerance(a: &[f64], n: usize, tolerance: f64) -> Result<E
             vectors: Vec::new(),
         });
     }
-    // Verify symmetry: the Jacobi iteration assumes it and would silently
-    // converge to the eigenvalues of the symmetric part otherwise.
-    for i in 0..n {
-        for j in i + 1..n {
-            let lhs = a[i * n + j];
-            let rhs = a[j * n + i];
-            let scale = lhs.abs().max(rhs.abs()).max(1.0);
-            if (lhs - rhs).abs() > 1e-12 * scale {
-                return Err(NclyError::invalid_shape(
-                    "eigen::symmetric",
-                    format!("matrix is not symmetric at ({i}, {j})"),
-                ));
-            }
-        }
-    }
+    check_symmetric(a, n)?;
 
     let mut m = a.to_vec();
     let mut v = vec![0.0; n * n];
@@ -110,13 +155,8 @@ pub fn symmetric_with_tolerance(a: &[f64], n: usize, tolerance: f64) -> Result<E
     let max_sweeps = 100 * n.max(1);
     let mut converged = false;
     for _sweep in 0..max_sweeps {
-        let mut off = 0.0f64;
-        for i in 0..n {
-            for j in i + 1..n {
-                off += m[i * n + j] * m[i * n + j];
-            }
-        }
-        if off.sqrt() <= target {
+        let off = off_diagonal_norm(&m, n);
+        if off <= target {
             converged = true;
             break;
         }
@@ -136,30 +176,10 @@ pub fn symmetric_with_tolerance(a: &[f64], n: usize, tolerance: f64) -> Result<E
                 //     θ = ½ atan2(2 a_pq, a_qq - a_pp).
                 // The sign of the second argument matters: using a_pp - a_qq
                 // rotates the wrong way and the sweep does not converge.
-                let _ = app;
                 let theta = 0.5 * (2.0 * apq).atan2(aqq - app);
                 let (s, c) = theta.sin_cos();
 
-                // Apply Jᵀ A J to rows/columns p and q.
-                for k in 0..n {
-                    let mkp = m[k * n + p];
-                    let mkq = m[k * n + q];
-                    m[k * n + p] = c * mkp - s * mkq;
-                    m[k * n + q] = s * mkp + c * mkq;
-                }
-                for k in 0..n {
-                    let mpk = m[p * n + k];
-                    let mqk = m[q * n + k];
-                    m[p * n + k] = c * mpk - s * mqk;
-                    m[q * n + k] = s * mpk + c * mqk;
-                }
-                // Accumulate V = V·J.
-                for k in 0..n {
-                    let vkp = v[k * n + p];
-                    let vkq = v[k * n + q];
-                    v[k * n + p] = c * vkp - s * vkq;
-                    v[k * n + q] = s * vkp + c * vkq;
-                }
+                apply_rotation(&mut m, &mut v, n, p, q, c, s);
             }
         }
     }

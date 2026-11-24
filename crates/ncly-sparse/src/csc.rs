@@ -185,12 +185,14 @@ impl CscMatrix {
 }
 
 impl fmt::Debug for CscMatrix {
+    /// Prints the shape and nnz rather than every stored index; see
+    /// [`crate::CsrMatrix`] for why the compressed arrays are elided.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CscMatrix")
             .field("rows", &self.rows)
             .field("cols", &self.cols)
             .field("nnz", &self.nnz())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

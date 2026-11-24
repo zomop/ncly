@@ -46,114 +46,114 @@ const COLUMN_BLOCK: usize = 64;
 /// Dense matrix product.
 ///
 /// See the module-level documentation above for the shape rules.
-pub fn matmul(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
-    let a = lhs.shape().dims();
-    let b = rhs.shape().dims();
-    match (a.len(), b.len()) {
-        (2, 2) => {
-            if a[1] != b[0] {
-                return Err(NclyError::shape_mismatch(
-                    "matmul",
-                    format!("({}, {}) x ({}, {})", a[0], a[1], b[0], b[1]),
-                    format!("inner dimensions {} and {} differ", a[1], b[0]),
-                ));
-            }
-            let (m, k, n) = (a[0], a[1], b[1]);
-            let mut out = vec![0.0; m * n];
-            let left = lhs.to_contiguous();
-            let right = rhs.to_contiguous();
-            matmul_dense(
-                left.as_slice().expect("contiguous"),
-                right.as_slice().expect("contiguous"),
-                m,
-                k,
-                n,
-                &mut out,
-            );
-            Ok(Tensor::from_parts(
-                Arc::new(out),
-                Layout::contiguous(Shape::new([m, n])),
-            ))
-        }
-        (3, 3) => {
-            if a[0] != b[0] {
-                return Err(NclyError::shape_mismatch(
-                    "matmul",
-                    format!(
-                        "({}, {}, {}) x ({}, {}, {})",
-                        a[0], a[1], a[2], b[0], b[1], b[2]
-                    ),
-                    "batch dimensions differ",
-                ));
-            }
-            if a[2] != b[1] {
-                return Err(NclyError::shape_mismatch(
-                    "matmul",
-                    format!(
-                        "({}, {}, {}) x ({}, {}, {})",
-                        a[0], a[1], a[2], b[0], b[1], b[2]
-                    ),
-                    format!("inner dimensions {} and {} differ", a[2], b[1]),
-                ));
-            }
-            let (batch, m, k, n) = (a[0], a[1], a[2], b[2]);
-            let left = lhs.to_contiguous();
-            let right = rhs.to_contiguous();
-            let la = left.as_slice().expect("contiguous");
-            let rb = right.as_slice().expect("contiguous");
-            let mut out = vec![0.0; batch * m * n];
-            for index in 0..batch {
-                matmul_dense(
-                    &la[index * m * k..(index + 1) * m * k],
-                    &rb[index * k * n..(index + 1) * k * n],
-                    m,
-                    k,
-                    n,
-                    &mut out[index * m * n..(index + 1) * m * n],
-                );
-            }
-            Ok(Tensor::from_parts(
-                Arc::new(out),
-                Layout::contiguous(Shape::new([batch, m, n])),
-            ))
-        }
-        (3, 2) => {
-            let (batch, m, k) = (a[0], a[1], a[2]);
-            let n = b[1];
-            if k != b[0] {
-                return Err(NclyError::shape_mismatch(
-                    "matmul",
-                    format!("({batch}, {m}, {k}) x ({}, {n})", b[0]),
-                    format!("inner dimensions {k} and {} differ", b[0]),
-                ));
-            }
-            let left = lhs.to_contiguous();
-            let right = rhs.to_contiguous();
-            let la = left.as_slice().expect("contiguous");
-            let rb = right.as_slice().expect("contiguous");
-            let mut out = vec![0.0; batch * m * n];
-            for index in 0..batch {
-                matmul_dense(
-                    &la[index * m * k..(index + 1) * m * k],
-                    rb,
-                    m,
-                    k,
-                    n,
-                    &mut out[index * m * n..(index + 1) * m * n],
-                );
-            }
-            Ok(Tensor::from_parts(
-                Arc::new(out),
-                Layout::contiguous(Shape::new([batch, m, n])),
-            ))
-        }
-        _ => Err(NclyError::invalid_shape(
+/// Rank-2 product: `(m × k) · (k × n)`.
+fn matmul_rank2(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
+    let (a, b) = (lhs.shape().dims(), rhs.shape().dims());
+    if a[1] != b[0] {
+        return Err(NclyError::shape_mismatch(
             "matmul",
-            format!(
-                "operands of rank {} and {} are not supported; use rank 2 or 3",
-                a.len(),
-                b.len()
-            ),
+            format!("({}, {}) x ({}, {})", a[0], a[1], b[0], b[1]),
+            format!("inner dimensions {} and {} differ", a[1], b[0]),
+        ));
+    }
+    let (m, k, n) = (a[0], a[1], b[1]);
+    let mut out = vec![0.0; m * n];
+    let left = lhs.to_contiguous();
+    let right = rhs.to_contiguous();
+    matmul_dense(
+        left.as_slice().expect("contiguous"),
+        right.as_slice().expect("contiguous"),
+        m,
+        k,
+        n,
+        &mut out,
+    );
+    Ok(Tensor::from_parts(
+        Arc::new(out),
+        Layout::contiguous(Shape::new([m, n])),
+    ))
+}
+
+/// Batched product `(b × m × k) · (b × k × n)`.
+fn matmul_batched(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
+    let (a, b) = (lhs.shape().dims(), rhs.shape().dims());
+    if a[0] != b[0] {
+        return Err(NclyError::shape_mismatch(
+            "matmul",
+            format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+            "batch dimensions differ",
+        ));
+    }
+    if a[2] != b[1] {
+        return Err(NclyError::shape_mismatch(
+            "matmul",
+            format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+            format!("inner dimensions {} and {} differ", a[2], b[1]),
+        ));
+    }
+    let (batch, m, k, n) = (a[0], a[1], a[2], b[2]);
+    let left = lhs.to_contiguous();
+    let right = rhs.to_contiguous();
+    let la = left.as_slice().expect("contiguous");
+    let rb = right.as_slice().expect("contiguous");
+    let mut out = vec![0.0; batch * m * n];
+    for index in 0..batch {
+        matmul_dense(
+            &la[index * m * k..(index + 1) * m * k],
+            &rb[index * k * n..(index + 1) * k * n],
+            m,
+            k,
+            n,
+            &mut out[index * m * n..(index + 1) * m * n],
+        );
+    }
+    Ok(Tensor::from_parts(
+        Arc::new(out),
+        Layout::contiguous(Shape::new([batch, m, n])),
+    ))
+}
+
+/// One batch of matrices times a single rank-2 matrix: `(b × m × k) · (k × n)`.
+fn matmul_batched_by_matrix(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
+    let (a, b) = (lhs.shape().dims(), rhs.shape().dims());
+    let (batch, m, k) = (a[0], a[1], a[2]);
+    let n = b[1];
+    if k != b[0] {
+        return Err(NclyError::shape_mismatch(
+            "matmul",
+            format!("({batch}, {m}, {k}) x ({}, {n})", b[0]),
+            format!("inner dimensions {k} and {} differ", b[0]),
+        ));
+    }
+    let left = lhs.to_contiguous();
+    let right = rhs.to_contiguous();
+    let la = left.as_slice().expect("contiguous");
+    let rb = right.as_slice().expect("contiguous");
+    let mut out = vec![0.0; batch * m * n];
+    for index in 0..batch {
+        matmul_dense(
+            &la[index * m * k..(index + 1) * m * k],
+            rb,
+            m,
+            k,
+            n,
+            &mut out[index * m * n..(index + 1) * m * n],
+        );
+    }
+    Ok(Tensor::from_parts(
+        Arc::new(out),
+        Layout::contiguous(Shape::new([batch, m, n])),
+    ))
+}
+
+pub fn matmul(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
+    match (lhs.rank(), rhs.rank()) {
+        (2, 2) => matmul_rank2(lhs, rhs),
+        (3, 3) => matmul_batched(lhs, rhs),
+        (3, 2) => matmul_batched_by_matrix(lhs, rhs),
+        (a, b) => Err(NclyError::invalid_shape(
+            "matmul",
+            format!("operands of rank {a} and {b} are not supported; use rank 2 or 3"),
         )),
     }
 }

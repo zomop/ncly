@@ -218,7 +218,7 @@ impl Lu {
     /// Determinant, accumulated in log space internally.
     pub fn determinant(&self) -> f64 {
         let n = self.size;
-        let mut sign = if self.swaps % 2 == 0 { 1.0 } else { -1.0 };
+        let mut sign = if self.swaps.is_multiple_of(2) { 1.0 } else { -1.0 };
         let mut log_abs = 0.0;
         for i in 0..n {
             let diagonal = self.factors[i * n + i];
@@ -236,7 +236,7 @@ impl Lu {
     /// `log|det A|` and the sign of `det A`.
     pub fn log_determinant(&self) -> (f64, f64) {
         let n = self.size;
-        let mut sign = if self.swaps % 2 == 0 { 1.0 } else { -1.0 };
+        let mut sign = if self.swaps.is_multiple_of(2) { 1.0 } else { -1.0 };
         let mut log_abs = 0.0;
         for i in 0..n {
             let diagonal = self.factors[i * n + i];
