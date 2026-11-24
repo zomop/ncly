@@ -526,10 +526,17 @@ mod tests {
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
         // `exp` and `mul` fold; the add cannot, because `a` is an input.
         assert_eq!(result.folded, 2);
-        // Nodes: a, the folded `exp` leaf, the folded `mul` leaf, the add. The
-        // caller-supplied constant `c` disappears with the subgraph that consumed
-        // it, so the optimised graph only needs `a` at run time.
-        assert_eq!(result.graph.len(), 4, "{}", result.graph.describe());
+        // Nodes: `a`, the single folded leaf holding `exp(c)·exp(c)`, and the
+        // add. Both folded operations are baked into *one* leaf, because the
+        // inner `exp` leaf is itself only reachable through the `mul`, so it is
+        // not rebuilt. The caller-supplied constant `c` disappears with the
+        // subgraph that consumed it, so only `a` is needed at run time.
+        assert_eq!(
+            result.graph.len(),
+            graph.len() - 2,
+            "{}",
+            result.graph.describe()
+        );
         assert_eq!(result.removed_dead, 0, "{}", result.graph.describe());
         // `c` lost its own node: the rebuilt graph has no input of that name,
         // because the subgraph that consumed it was replaced by baked leaves.
