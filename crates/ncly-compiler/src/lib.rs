@@ -186,6 +186,37 @@ fn fold_constants<S: BuildHasher>(
     folding
 }
 
+/// Nodes still needed in the *rebuilt* graph.
+///
+/// Reachability from the outputs, but stopping at folded nodes: a folded node is
+/// replaced by a leaf holding its value, so whatever used to feed it is no longer
+/// needed. Without this, a constant that only existed to feed a folded subgraph
+/// would survive as an unreachable input in the rewritten graph, and the caller
+/// would still be expected to supply a value for it.
+fn needed_after_folding(
+    graph: &Graph,
+    outputs: &[NodeId],
+    folded: &HashSet<NodeId>,
+) -> HashSet<NodeId> {
+    let mut seen = HashSet::new();
+    let mut stack: Vec<NodeId> = outputs.to_vec();
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        if folded.contains(&id) {
+            continue;
+        }
+        let Some(node) = graph.nodes().get(id.0) else {
+            continue;
+        };
+        for &parent in &node.inputs {
+            stack.push(parent);
+        }
+    }
+    seen
+}
+
 /// Apply the requested passes to `graph` and return the optimised graph.
 ///
 /// The output list defines liveness: anything not reachable from an output is
@@ -224,6 +255,13 @@ pub fn optimize_with_constants<S: BuildHasher>(
     };
     let folded_count = folding.folded.len();
     let (known, folded) = (folding.known, folding.folded);
+    // `folded` first: this decides which nodes are still needed in the rebuilt
+    // graph, which is *not* the same as the pre-fold liveness set.
+    let needed = if passes.constant_folding {
+        needed_after_folding(graph, outputs, &folded)
+    } else {
+        live.clone()
+    };
 
     // --- 3. Rebuild with CSE ---------------------------------------------
     let mut rebuilt = Graph::new();
@@ -234,6 +272,11 @@ pub fn optimize_with_constants<S: BuildHasher>(
     for index in 0..graph.len() {
         let id = NodeId(index);
         if !live.contains(&id) && passes.dead_code {
+            continue;
+        }
+        // Dropped because folding made it unreachable; it is not a dead-code
+        // removal, which is why it is not counted in `removed_dead`.
+        if passes.constant_folding && !needed.contains(&id) {
             continue;
         }
         let node = &graph.nodes()[index];
@@ -483,10 +526,9 @@ mod tests {
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
         // `exp` and `mul` fold; the add cannot, because `a` is an input.
         assert_eq!(result.folded, 2);
-        // Nodes: a, the folded `exp` leaf, the folded `mul` leaf, the add. Baked
-        // leaves are distinct from each other by construction, so `mul` is not
-        // merged into `exp`, and the caller-supplied constant `c` disappears with
-        // the subgraph that consumed it.
+        // Nodes: a, the folded `exp` leaf, the folded `mul` leaf, the add. The
+        // caller-supplied constant `c` disappears with the subgraph that consumed
+        // it, so the optimised graph only needs `a` at run time.
         assert_eq!(result.graph.len(), 4, "{}", result.graph.describe());
         assert_eq!(result.removed_dead, 0, "{}", result.graph.describe());
         // `c` lost its own node: the rebuilt graph has no input of that name,

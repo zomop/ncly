@@ -74,8 +74,12 @@ fn main() -> Result<(), NclyError> {
     println!("{}", optimised.graph.describe());
 
     // The optimised graph must produce the same answer.
+    //
+    // Values are re-keyed through the remap for *every* leaf that still exists.
+    // Hand-picking a couple of inputs is how this example first went wrong: it
+    // forgot the bias and failed at run time with "no value supplied for input b".
     let mut reduced_values = HashMap::new();
-    for (old, tensor) in [(x, &values[&x]), (w, &values[&w])] {
+    for (old, tensor) in &values {
         if let Some(&new) = optimised.remap.get(&old.0) {
             reduced_values.insert(ncly::NodeId(new), tensor.clone());
         }
