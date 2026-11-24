@@ -30,7 +30,8 @@ const NUMERIC: f64 = 1e-4;
 #[test]
 fn scalar_compositions_match_finite_differences() {
     // Each entry: (name, function of Dual, function of f64).
-    let cases: Vec<(&str, fn(Dual) -> Dual, fn(f64) -> f64)> = vec![
+    type Case = (&'static str, fn(Dual) -> Dual, fn(f64) -> f64);
+    let cases: Vec<Case> = vec![
         ("x^2 + 3x", |d| d * d + 3.0f64 * d, |x| x * x + 3.0 * x),
         ("sin(x)cos(x)", |d| d.sin() * d.cos(), |x| x.sin() * x.cos()),
         ("exp(-x^2)", |d| (-(d * d)).exp(), |x| (-(x * x)).exp()),
@@ -124,7 +125,7 @@ fn multivariate_gradient_matches_finite_differences() {
 #[test]
 fn tensor_gradients_match_finite_differences_elementwise() {
     // f(A) = sum(exp(A) · sin(A) · A) over a 3x4 tensor.
-    let mut rng = Rng::new(0xC0FFEE);
+    let mut rng = Rng::new(0x00C0_FFEE);
     let values: Vec<f64> = (0..12).map(|_| rng.range(-1.0, 1.0)).collect();
     let shape = [3usize, 4];
 
@@ -288,9 +289,9 @@ fn broadcasting_gradient_matches_finite_differences() {
 
     let scalar = |x: &[f64], y: &[f64]| -> f64 {
         let mut total = 0.0;
-        for i in 0..2 {
-            for j in 0..3 {
-                let v = x[j] + y[i];
+        for &yi in y {
+            for &xj in x {
+                let v = xj + yi;
                 total += v * v;
             }
         }

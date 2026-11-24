@@ -231,9 +231,15 @@ impl fmt::Display for Eigen {
 /// Eigenvalues of a general real matrix as `(real, imaginary)` pairs.
 ///
 /// The matrix is reduced to upper Hessenberg form by Householder similarity
-/// transformations, then the Francis double-shift QR iteration deflates it.
+/// transformations, then the implicitly shifted QR iteration deflates it. The
+/// shift is Wilkinson's (the trailing 2×2 eigenvalue closest to the corner), which
+/// gives local cubic convergence for real eigenvalues.
+///
 /// Real matrices may have complex conjugate pairs; those are reported with
-/// matching imaginary parts of opposite sign.
+/// matching imaginary parts of opposite sign. A complex pair is detected when the
+/// trailing 2×2 block is irreducible, and the block is then solved directly rather
+/// than iterated on — a real shift cannot separate a complex pair, so iterating
+/// would not converge.
 ///
 /// # Errors
 ///
@@ -247,35 +253,38 @@ pub fn eigenvalues(a: &[f64], n: usize) -> Result<Vec<(f64, f64)>> {
     let mut eigenvalues = Vec::with_capacity(n);
     let max_iterations = 1000 * n.max(1);
 
-    // Active window is [low, high].
+    // Active window is [low, high]. Rows/columns above `high` have already
+    // converged and are never touched again.
     let mut high = n as isize - 1;
     let mut iterations = 0usize;
     let scale = a.iter().fold(0.0f64, |acc, v| acc.max(v.abs())).max(1.0);
 
     while high >= 1 {
-        // Look for a negligible subdiagonal entry to split the problem.
-        let mut low = high;
+        let high_index = high as usize;
+        // Look for a negligible subdiagonal entry to split the problem. The test
+        // is on `h[i][i-1]` — the subdiagonal — because a Hessenberg matrix has
+        // zeros everywhere below it.
+        let mut low = high_index;
         while low > 0 {
-            let sub = h[(low as usize - 1) * n + low as usize].abs();
-            let diagonal = h[(low as usize - 1) * n + (low as usize - 1)].abs()
-                + h[low as usize * n + low as usize].abs();
-            if sub <= 1e-14 * diagonal.max(scale) {
-                h[(low as usize - 1) * n + low as usize] = 0.0;
+            let sub = h[low * n + (low - 1)].abs();
+            let diagonal = h[(low - 1) * n + (low - 1)].abs() + h[low * n + low].abs();
+            if sub <= 1e-15 * diagonal.max(scale) {
+                h[low * n + (low - 1)] = 0.0;
                 break;
             }
             low -= 1;
         }
 
-        if low == high {
+        if low == high_index {
             // 1×1 block: a real eigenvalue.
-            let index = high as usize;
-            eigenvalues.push((h[index * n + index], 0.0));
+            eigenvalues.push((h[high_index * n + high_index], 0.0));
             high -= 1;
             continue;
         }
-        if low == high - 1 {
-            // 2×2 block: solve the quadratic directly.
-            let (r1, i1, r2, i2) = two_by_two(&h, n, low as usize);
+        if low == high_index - 1 {
+            // 2×2 block: solve the quadratic directly, which is both faster and
+            // more accurate than iterating on it.
+            let (r1, i1, r2, i2) = two_by_two(&h, n, low);
             eigenvalues.push((r1, i1));
             eigenvalues.push((r2, i2));
             high -= 2;
@@ -290,33 +299,27 @@ pub fn eigenvalues(a: &[f64], n: usize) -> Result<Vec<(f64, f64)>> {
                 residual: None,
             });
         }
-        // Wilkinson shift: the eigenvalue of the trailing 2×2 block that is
-        // closest to the bottom-right corner.
-        //
-        // When the trailing block has a complex pair there is no good real shift;
-        // the real part is used instead, which is the standard fallback for a
-        // real-arithmetic QR iteration. Convergence is slower in that case but the
-        // block is deflated by the 2×2 branch above as soon as it decouples.
-        let (r1, i1, r2, _i2) = two_by_two(&h, n, high as usize - 1);
+        // Wilkinson shift: the eigenvalue of the trailing 2×2 block closer to the
+        // corner. For a complex pair there is no good real shift; the corner entry
+        // is used, which keeps the iteration progressing (the 2×2 block then
+        // decouples and is solved directly above).
+        let (r1, i1, r2, _i2) = two_by_two(&h, n, high_index - 1);
+        // `i1 != 0.0` means the trailing block has a complex conjugate pair.
+        let corner = h[high_index * n + high_index];
         let shift = if i1 == 0.0 {
-            let corner = h[high as usize * n + high as usize];
             if (r1 - corner).abs() < (r2 - corner).abs() {
                 r1
             } else {
                 r2
             }
         } else {
-            r1
+            corner
         };
-        for i in low as usize..=high as usize {
-            h[i * n + i] -= shift;
-        }
-        implicit_qr_step(&mut h, n, low as usize, high as usize);
-        for i in low as usize..=high as usize {
-            h[i * n + i] += shift;
-        }
+        implicit_qr_step(&mut h, n, low, high_index, shift);
     }
-    eigenvalues.push((h[0], 0.0));
+    if high == 0 {
+        eigenvalues.push((h[0], 0.0));
+    }
     Ok(eigenvalues)
 }
 
@@ -395,35 +398,65 @@ fn two_by_two(h: &[f64], n: usize, start: usize) -> (f64, f64, f64, f64) {
 }
 
 /// One shifted QR step on the Hessenberg window via Givens rotations.
-fn implicit_qr_step(h: &mut [f64], n: usize, low: usize, high: usize) {
+/// One implicit-shifted QR step (Francis single shift) on the active window
+/// `[low, high]` of an upper Hessenberg matrix.
+///
+/// The first plane rotation is chosen to annihilate `(h[low][low] - shift,
+/// h[low+1][low])`, which is exactly the first column of `H - shift·I`. The
+/// remaining rotations chase the resulting bulge down the subdiagonal. Because
+/// every rotation is applied from both sides, the result is `Qᵀ H Q`, so the
+/// eigenvalues are unchanged and the Hessenberg form is restored.
+///
+/// # Why the shift must enter here
+///
+/// Rotating on `(h[low][low], h[low+1][low])` *without* subtracting the shift
+/// makes the first rotation the identity whenever the window starts on a
+/// Hessenberg matrix, so the step does nothing at all and the iteration never
+/// deflates. The shift is not an optimisation: it is what gives the step a
+/// non-trivial first rotation.
+fn implicit_qr_step(h: &mut [f64], n: usize, low: usize, high: usize, shift: f64) {
+    let mut x = h[low * n + low] - shift;
+    let mut y = h[(low + 1) * n + low];
     for k in low..high {
-        let (s, c) = rotation(h[k * n + k], h[(k + 1) * n + k]);
-        // Apply G to rows k, k+1 …
-        for j in 0..n {
-            let x = h[k * n + j];
-            let y = h[(k + 1) * n + j];
-            h[k * n + j] = c * x + s * y;
-            h[(k + 1) * n + j] = -s * x + c * y;
+        let (c, s) = rotation(x, y);
+        // Left: rows `k`, `k+1`, across the whole active block. Columns before
+        // `low` are already zero in a Hessenberg matrix and must stay zero.
+        for j in low..n {
+            let upper = h[k * n + j];
+            let lower = h[(k + 1) * n + j];
+            h[k * n + j] = c * upper + s * lower;
+            h[(k + 1) * n + j] = -s * upper + c * lower;
         }
-        // … and from the right to columns k, k+1.
-        for i in 0..n {
-            let x = h[i * n + k];
-            let y = h[i * n + k + 1];
-            h[i * n + k] = c * x + s * y;
-            h[i * n + k + 1] = -s * x + c * y;
+        // Right: columns `k`, `k+1`, over the rows the bulge can reach.
+        for i in 0..(high + 2).min(n) {
+            let left = h[i * n + k];
+            let right = h[i * n + k + 1];
+            h[i * n + k] = c * left + s * right;
+            h[i * n + k + 1] = -s * left + c * right;
+        }
+        // Next rotation annihilates the bulge this one created.
+        if k + 2 <= high {
+            x = h[(k + 1) * n + k];
+            y = h[(k + 2) * n + k];
         }
     }
 }
 
 /// Givens rotation `(s, c)` zeroing `b` against `a`.
-fn rotation(a: f64, b: f64) -> (f64, f64) {
-    let magnitude = a.abs().max(b.abs());
-    if magnitude == 0.0 {
+/// Givens rotation `(c, s)` with `c·f + s·g = r` and `-s·f + c·g = 0`.
+///
+/// The magnitude is normalised with the larger of `|f|` and `|g|` so the result
+/// cannot overflow; the signs of `(f, g)` are irrelevant because the rotation is
+/// used on both sides of a similarity transform.
+fn rotation(f: f64, g: f64) -> (f64, f64) {
+    if g == 0.0 {
+        return (1.0, 0.0);
+    }
+    if f == 0.0 {
         return (0.0, 1.0);
     }
-    let (x, y) = (a / magnitude, b / magnitude);
-    let norm = (x * x + y * y).sqrt();
-    (y / norm, x / norm)
+    let r = f.hypot(g);
+    (f / r, g / r)
 }
 
 #[cfg(test)]
@@ -500,6 +533,39 @@ mod tests {
         assert!((values[0].0 + 3.0).abs() < 1e-9, "{values:?}");
         assert!((values[1].0 - 2.0).abs() < 1e-9, "{values:?}");
         assert!((values[2].0 - 4.0).abs() < 1e-9, "{values:?}");
+    }
+
+    #[test]
+    fn general_eigenvalues_of_a_non_symmetric_random_matrix() {
+        // A deterministic 5x5 matrix whose eigenvalues were computed
+        // independently (real parts, sorted):
+        // (numpy.linalg.eigvals, real parts):
+        //   -2.196856, -2.196856, -1.846219, 0.640739, 1.710028
+        // with a complex pair present.
+        #[rustfmt::skip]
+        let a = [
+            -0.704669, -1.396603,  0.603738, -1.710255,  0.143528,
+            -0.537244, -1.768004,  0.029743, -1.850017, -0.265417,
+            -1.720578, -1.637148, -0.301923,  1.307408, -1.504792,
+            -1.107044,  0.509733,  1.790836,  0.308412, -0.413278,
+             1.905020, -1.813669,  1.433874, -0.841563, -1.422980,
+        ];
+        let values = eigenvalues(&a, 5).unwrap();
+        assert_eq!(values.len(), 5);
+        let mut real: Vec<f64> = values.iter().map(|v| v.0).collect();
+        real.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
+        let expected = [-2.196_856, -2.196_856, -1.846_219, 0.640_739, 1.710_028];
+        for (found, want) in real.iter().zip(expected) {
+            assert!((found - want).abs() < 1e-4, "found {real:?}, expected {expected:?}");
+        }
+        // The trace must be reproduced exactly: the sum of the eigenvalues.
+        let trace: f64 = (0..5).map(|i| a[i * 5 + i]).sum();
+        assert!((real.iter().sum::<f64>() - trace).abs() < 1e-9);
+        // At least one conjugate pair.
+        assert!(values.iter().any(|v| v.1.abs() > 0.1), "{values:?}");
+        // Conjugate pairs are reported in matching pairs.
+        let imaginary: f64 = values.iter().map(|v| v.1).sum();
+        assert!(imaginary.abs() < 1e-9, "imaginary parts must cancel: {values:?}");
     }
 
     #[test]

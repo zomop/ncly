@@ -478,6 +478,32 @@ impl CsrMatrix {
         true
     }
 
+    /// True when `A = Aᵀ` in both pattern and values.
+    ///
+    /// Distinct from [`CsrMatrix::is_symmetric_pattern`], which only checks that
+    /// the mirror entries exist — a matrix can be structurally symmetric and
+    /// numerically asymmetric, which is exactly what preconditioners need to know.
+    #[must_use]
+    pub fn is_numerically_symmetric(&self) -> bool {
+        if !self.is_symmetric_pattern() {
+            return false;
+        }
+        for row in 0..self.rows {
+            for position in self.row_ptr[row]..self.row_ptr[row + 1] {
+                let column = self.col_idx[position];
+                let start = self.row_ptr[column];
+                let end = self.row_ptr[column + 1];
+                let Ok(slot) = self.col_idx[start..end].binary_search(&row) else {
+                    return false;
+                };
+                if self.values[position] != self.values[start + slot] {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// Largest absolute stored value.
     pub fn max_abs(&self) -> f64 {
         self.values.iter().fold(0.0f64, |acc, v| acc.max(v.abs()))
@@ -650,8 +676,15 @@ mod tests {
             CsrMatrix::from_triplets(2, 2, &[0, 1, 0, 1], &[0, 1, 1, 0], &[1.0, 1.0, 2.0, 2.0])
                 .unwrap();
         assert!(symmetric.is_symmetric_pattern());
+        // sample() = [[10, 0, 20], [0, 30, 0], [40, 0, 50]]: (0,2) is stored but
+        // (2,0) is present too, so the pattern *is* symmetric while the values
+        // are not.
         let a = sample();
-        assert!(!a.is_symmetric_pattern());
+        assert!(a.is_symmetric_pattern());
+        assert!(!a.is_numerically_symmetric());
+
+        let asymmetric = CsrMatrix::from_triplets(3, 3, &[0, 1], &[2, 1], &[1.0, 1.0]).unwrap();
+        assert!(!asymmetric.is_symmetric_pattern());
     }
 
     #[test]

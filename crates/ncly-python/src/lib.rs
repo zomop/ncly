@@ -545,7 +545,7 @@ fn solve(a: Vec<Vec<f64>>, b: Vec<f64>) -> PyResult<Vec<f64>> {
 #[pyfunction]
 fn lstsq(a: Vec<Vec<f64>>, b: Vec<f64>) -> PyResult<Vec<f64>> {
     let m = a.len();
-    let n = a.first().map(Vec::len).unwrap_or(0);
+    let n = a.first().map_or(0, Vec::len);
     let mut flat = Vec::with_capacity(m * n);
     for row in &a {
         if row.len() != n {

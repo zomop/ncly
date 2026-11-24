@@ -331,13 +331,19 @@ impl Tensor {
             self.is_contiguous(),
             "as_slice_unchecked requires a contiguous tensor; call to_contiguous() first"
         );
-        &self.storage[..self.len()]
+        let start = self.layout().offset();
+        &self.storage[start..start + self.len()]
     }
 
     /// The underlying slice, or `None` for strided views.
     pub fn as_slice(&self) -> Option<&[f64]> {
+        // A narrowed view is contiguous but starts at a non-zero offset; slicing
+        // from 0 would silently read the wrong elements, so the offset must be
+        // applied here.
         if self.is_contiguous() {
-            Some(&self.storage[..self.len()])
+            let start = self.layout().offset();
+            let end = start + self.len();
+            self.storage.get(start..end)
         } else {
             None
         }

@@ -436,7 +436,8 @@ mod tests {
         // leaves are distinct from each other by construction, so `mul` is not
         // merged into `exp`; the caller-supplied constant `c` is dead.
         assert_eq!(result.graph.len(), 4, "{}", result.graph.describe());
-        assert_eq!(result.removed_dead, 1);
+        // Nothing is dead here: `c` feeds the folded subgraph, so it is reachable.
+        assert_eq!(result.removed_dead, 0);
 
         // Numerical check: the folded leaf equals exp(c) * exp(c).
         let mut values = HashMap::new();
