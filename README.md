@@ -410,12 +410,19 @@ throughput (GFLOP/s for matmul, GiB/s for memory-bound kernels). The measured
 figures — with the machine, toolchain and flags they came from — are in
 [`BENCHMARKS.md`](BENCHMARKS.md) and nowhere else.
 
-Two data points from that file, chosen because they are honest rather than
-flattering: single-threaded `matmul` reaches 10–11 GFLOP/s at 256x256 and falls to
-6.2 at 512x512, and `tensor add` is about 3.5x slower than a bare `axpy` on the
-same element count because of the broadcast-plan bookkeeping around the kernel. The
-first is a missing register-blocked GEMM; the second is overhead that can be
-removed. Both are listed in the roadmap instead of being described as fast.
+Three data points from that file, chosen because they are honest rather than
+flattering:
+
+- single-threaded `matmul` reaches 7.4–8.6 GFLOP/s for 64–256 and drops to 4.6 at
+  512×512 — a missing register-blocked GEMM, and the reason multithreading is on
+  the roadmap;
+- `tensor add` moves about 9.7 GiB/s against 51.8 GiB/s for a bare `axpy` on the
+  same element count — the cost of the broadcast plan around the kernel;
+- the optimiser takes a graph with a repeated constant subexpression from 1.564 ms
+  to 1.175 ms, and the optimised graph no longer needs the constant as an input.
+
+Runs on a shared CI vCPU differ by roughly 10–40%, so quote the ranges, not the
+point values.
 
 ## Project layout
 
