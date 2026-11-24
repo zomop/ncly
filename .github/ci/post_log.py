@@ -38,6 +38,9 @@ def main() -> int:
     except OSError:
         log = "(log file missing)"
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    # Several jobs post on the same commit; the run name keeps them apart when
+    # reading the comments back out.
+    run_name = os.environ.get("CIRUN") or "ncly"
     repo = os.environ.get("GITHUB_REPOSITORY")
     sha = os.environ.get("GITHUB_SHA")
     if not (token and repo and sha):
@@ -48,7 +51,12 @@ def main() -> int:
     for index in range(total):
         chunk = body[index * CHUNK : (index + 1) * CHUNK]
         try:
-            post(token, repo, sha, f"ncly log {index + 1}/{total}\n```\n{chunk}\n```\n")
+            post(
+                token,
+                repo,
+                sha,
+                f"{run_name} log {index + 1}/{total}\n```\n{chunk}\n```\n",
+            )
         except Exception as exc:  # noqa: BLE001 - diagnostics only
             print(f"post_log: upload failed: {exc!r}")
             return 0

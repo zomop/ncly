@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: bench
     steps:
       - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2

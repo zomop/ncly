@@ -381,7 +381,9 @@ fn sum_to_shape(value: &Tensor, target: &Shape) -> Result<Tensor> {
 
 thread_local! {
     /// Tape used by [`Variable::auto`] when a leaf joins the current recording.
-    static CURRENT_TAPE: RefCell<Option<Tape>> = const { RefCell::new(None) };
+    // `const { .. }` in a `static` initializer is Rust 1.79; plain `RefCell::new`
+    // is const since 1.0-far-earlier, so this keeps the declared 1.75 MSRV.
+    static CURRENT_TAPE: RefCell<Option<Tape>> = RefCell::new(None);
 }
 
 /// A handle to a differentiable value.
