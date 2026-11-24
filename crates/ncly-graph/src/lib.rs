@@ -529,7 +529,7 @@ fn infer_shape(op: &Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
                 _ => vec![1],
             })
         }
-        Op::Sum => vec![],
+        Op::Sum => Ok(Vec::new()),
         Op::SumAxis(axis) => {
             let axis = *axis;
             if axis >= first.len() {

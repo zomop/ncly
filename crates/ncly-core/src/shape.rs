@@ -142,6 +142,7 @@ impl Shape {
     }
 
     /// Shape with every axis of length `1` removed.
+    #[must_use]
     pub fn squeezed(&self) -> Shape {
         Self {
             dims: self.dims.iter().copied().filter(|&d| d != 1).collect(),
@@ -163,7 +164,7 @@ impl Shape {
                 format!("axis {axis} has length {}", self.dims[axis]),
             ));
         }
-        Ok(self.without_axis(axis)?)
+        self.without_axis(axis)
     }
 
     /// Validate a reshape between the same element count.
@@ -224,15 +225,18 @@ impl Shape {
     }
 
     /// Decompose a flat row-major offset into an index vector.
-    pub fn index_of(&self, mut offset: usize) -> Option<Vec<usize>> {
+    ///
+    /// Walking right to left keeps the running stride, so there is no division by
+    /// a precomputed product per axis.
+    pub fn index_of(&self, offset: usize) -> Option<Vec<usize>> {
         if offset >= self.size() {
             return None;
         }
         let mut index = vec![0usize; self.rank()];
-        for axis in 0..self.rank() {
-            let stride = self.inner_size(axis);
-            index[axis] = offset / stride;
-            offset %= stride;
+        let mut stride = 1usize;
+        for axis in (0..self.rank()).rev() {
+            index[axis] = offset / stride % self.dims[axis];
+            stride *= self.dims[axis];
         }
         Some(index)
     }
@@ -305,6 +309,16 @@ impl<'a> IntoIterator for &'a Shape {
     type IntoIter = core::slice::Iter<'a, usize>;
 
     fn into_iter(self) -> Self::IntoIter {
+        self.dims.iter()
+    }
+}
+
+impl Shape {
+    /// Borrow the axes, for use with `for dim in shape.iter()`.
+    ///
+    /// Provided because clippy's `iter_without_into_iter` lint treats
+    /// `IntoIterator for &Shape` without an inherent `iter` as surprising.
+    pub fn iter(&self) -> core::slice::Iter<'_, usize> {
         self.dims.iter()
     }
 }

@@ -116,6 +116,7 @@ impl Layout {
     }
 
     /// Transpose by reversing all axes.
+    #[must_use]
     pub fn transpose(&self) -> Self {
         let mut dims = self.shape.dims().to_vec();
         dims.reverse();

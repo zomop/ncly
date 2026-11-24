@@ -411,8 +411,8 @@ unsafe fn avx2_sum(a: &[f64]) -> f64 {
         let mut lanes = [0.0f64; 4];
         _mm256_storeu_pd(lanes.as_mut_ptr(), acc);
         let mut total = lanes[0] + lanes[1] + lanes[2] + lanes[3];
-        for i in chunks * 4..n {
-            total += a[i];
+        for &value in &a[chunks * 4..n] {
+            total += value;
         }
         total
     }
@@ -497,8 +497,8 @@ unsafe fn sse2_sum(a: &[f64]) -> f64 {
         let mut lanes = [0.0f64; 2];
         _mm_storeu_pd(lanes.as_mut_ptr(), acc);
         let mut total = lanes[0] + lanes[1];
-        for i in chunks * 2..n {
-            total += a[i];
+        for &value in &a[chunks * 2..n] {
+            total += value;
         }
         total
     }
@@ -581,8 +581,8 @@ unsafe fn neon_sum(a: &[f64]) -> f64 {
             acc = vaddq_f64(acc, vld1q_f64(a.as_ptr().add(i * 2)));
         }
         let mut total = vaddvq_f64(acc);
-        for i in chunks * 2..n {
-            total += a[i];
+        for &value in &a[chunks * 2..n] {
+            total += value;
         }
         total
     }
@@ -600,7 +600,7 @@ mod tests {
     fn dispatch_reports_a_kernel() {
         let kernel = active_kernel();
         assert!(kernel.lanes() >= 1);
-        assert!(!kernel.name().is_empty());
+        assert_ne!(kernel.name(), "");
         assert_eq!(active_kernel(), kernel, "kernel choice must be stable");
     }
 
