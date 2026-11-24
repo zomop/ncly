@@ -4,6 +4,13 @@
 //! view type, so `ncly-linalg` does not depend on the tensor engine and can be
 //! used stand-alone or reused by the sparse and Python layers.
 //!
+//! # MSRV note
+//!
+//! `usize::is_multiple_of` was stabilised in Rust 1.87, but this crate declares
+//! 1.75, so the two parity tests below use `% 2 == 0` and the `manual_is_multiple_of`
+//! lint is allowed: following the lint would break the declared MSRV. Remove the
+//! allow (and the note) when the workspace MSRV moves past 1.87.
+//!
 //! # Numerical contract
 //!
 //! * **Partial pivoting** is used throughout; a pivot is rejected only when it
@@ -31,6 +38,7 @@
 //! assert!((x[1] - 2.0).abs() < 1e-12);
 //! ```
 
+#![allow(clippy::manual_is_multiple_of)]
 #![deny(missing_docs)]
 #![warn(missing_debug_implementations)]
 

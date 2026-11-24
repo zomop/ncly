@@ -219,7 +219,6 @@ impl Lu {
     pub fn determinant(&self) -> f64 {
         let n = self.size;
         // Each row swap flips the sign; an even number of swaps preserves it.
-        // `usize::is_multiple_of` is Rust 1.87; `% 2 == 0` keeps the 1.75 MSRV.
         let mut sign = if self.swaps % 2 == 0 { 1.0 } else { -1.0 };
         let mut log_abs = 0.0;
         for i in 0..n {
@@ -239,7 +238,6 @@ impl Lu {
     pub fn log_determinant(&self) -> (f64, f64) {
         let n = self.size;
         // Each row swap flips the sign; an even number of swaps preserves it.
-        // `usize::is_multiple_of` is Rust 1.87; `% 2 == 0` keeps the 1.75 MSRV.
         let mut sign = if self.swaps % 2 == 0 { 1.0 } else { -1.0 };
         let mut log_abs = 0.0;
         for i in 0..n {
