@@ -48,10 +48,15 @@ jobs:
             # Surface the failure where it can be read: job logs are not
             # retrievable through the API here, so the tail also becomes check
             # annotations, which do have an API.
+            # Prefer the error lines themselves; a plain tail is usually just
+            # `Compiling ...` noise from before the failure.
+            grep -E -A3 '^(error|warning: build failed|Caused by)' /tmp/log.txt \
+              | head -40 > /tmp/errs.txt
+            [ -s /tmp/errs.txt ] || tail -25 /tmp/log.txt > /tmp/errs.txt
             while IFS= read -r line; do
               [ -z "$line" ] && continue
               echo "::error file=.github/workflows/ci.yml::${line//%/%%}"
-            done < <(tail -25 /tmp/log.txt)
+            done < /tmp/errs.txt
           fi
           exit "$status"
       - uses: actions/upload-artifact@v4
@@ -116,10 +121,15 @@ jobs:
             # Surface the failure where it can be read: job logs are not
             # retrievable through the API here, so the tail also becomes check
             # annotations, which do have an API.
+            # Prefer the error lines themselves; a plain tail is usually just
+            # `Compiling ...` noise from before the failure.
+            grep -E -A3 '^(error|warning: build failed|Caused by)' /tmp/log.txt \
+              | head -40 > /tmp/errs.txt
+            [ -s /tmp/errs.txt ] || tail -25 /tmp/log.txt > /tmp/errs.txt
             while IFS= read -r line; do
               [ -z "$line" ] && continue
               echo "::error file=.github/workflows/ci.yml::${line//%/%%}"
-            done < <(tail -25 /tmp/log.txt)
+            done < /tmp/errs.txt
           fi
           exit "$status"
       - uses: actions/upload-artifact@v4
