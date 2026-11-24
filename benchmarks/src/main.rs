@@ -326,7 +326,11 @@ fn benchmark_graph_optimiser() -> Vec<Measurement> {
         "graph: unoptimised run",
         format!("n=2^16, nodes={}", graph.len()),
         20,
-        || graph.run(&[output], &values).map(|e| e.get(output).map(|t| t.sum())),
+        || {
+            graph
+                .run(&[output], &values)
+                .map(|e| e.get(output).map(|t| t.sum()))
+        },
     );
     let folded = measure(
         "graph: after folding/CSE/DCE",
