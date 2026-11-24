@@ -164,7 +164,7 @@ fn rebuild(
     needed: &HashSet<NodeId>,
     known: &HashMap<NodeId, Tensor>,
     folded: &HashSet<NodeId>,
-    passes: &Passes,
+    passes: Passes,
 ) -> Rebuilt {
     let mut rebuilt = Graph::new();
     let mut remap: HashMap<usize, usize> = HashMap::new();
@@ -206,18 +206,19 @@ fn rebuild(
             continue;
         }
 
+        // Every operand must already be in the new graph. Folding can drop a
+        // node's inputs, in which case the node itself is not needed either.
         let mut operands = Vec::with_capacity(node.inputs.len());
-        let mut missing = false;
+        let mut placed_all = true;
         for parent in &node.inputs {
-            match remap.get(&parent.0) {
-                Some(&new_parent) => operands.push(NodeId(new_parent)),
-                None => {
-                    missing = true;
-                    break;
-                }
+            if let Some(&new_parent) = remap.get(&parent.0) {
+                operands.push(NodeId(new_parent));
+            } else {
+                placed_all = false;
+                break;
             }
         }
-        if missing {
+        if !placed_all {
             continue;
         }
 
@@ -395,7 +396,7 @@ pub fn optimize_with_constants<S: BuildHasher>(
     };
 
     // --- 3. Rebuild with CSE ---------------------------------------------
-    let rebuilt = rebuild(graph, &live, &needed, &known, &folded, passes);
+    let rebuilt = rebuild(graph, &live, &needed, &known, &folded, *passes);
     let removed_duplicates = rebuilt.removed_duplicates;
 
     Optimized {
