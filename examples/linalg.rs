@@ -28,7 +28,9 @@ fn main() -> Result<(), NclyError> {
 
     let factorisation = Qr::factor(&design, 3, 2)?;
     let q = factorisation.q();
-    println!("‖QᵀQ - I‖_∞      = {:.3e}", orthogonality(&q, 3, 2));
+    let residual = orthogonality(&q, 3, 2);
+    println!("‖QᵀQ - I‖_∞      = {residual:.3e}");
+    assert!(residual < 1e-12, "householder QR must stay orthogonal");
 
     // --- Cholesky on a symmetric positive definite matrix ------------------
     // A = [[4, 2], [2, 3]]  →  L = [[2, 0], [1, √2]]
@@ -51,14 +53,19 @@ fn main() -> Result<(), NclyError> {
     Ok(())
 }
 
-/// `‖QᵀQ - I‖_∞`, with `Q` stored column-major as returned by `Qr::q`.
+/// `‖QᵀQ - I‖_∞` for the thin `Q` returned by `Qr::q`.
+///
+/// `Qr::q` returns a **row-major** `m × n` matrix, so column `i` is
+/// `q[k * cols + i]` over `k`. Indexing it as if it were column-major silently
+/// measures the orthogonality of a transposed matrix and reports a large residual
+/// for a perfectly good factorisation.
 fn orthogonality(q: &[f64], rows: usize, cols: usize) -> f64 {
     let mut worst: f64 = 0.0;
     for i in 0..cols {
         for j in 0..cols {
             let mut dot = 0.0;
             for k in 0..rows {
-                dot += q[i * rows + k] * q[j * rows + k];
+                dot += q[k * cols + i] * q[k * cols + j];
             }
             let expected = if i == j { 1.0 } else { 0.0 };
             worst = worst.max((dot - expected).abs());

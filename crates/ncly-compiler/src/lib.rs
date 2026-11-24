@@ -269,6 +269,11 @@ pub fn optimize_with_constants<S: BuildHasher>(
         let signature = Signature {
             op: node.op.clone(),
             inputs: operands.iter().map(|id| id.0).collect(),
+            leaf: if node.op == Op::Input {
+                node.name.clone()
+            } else {
+                None
+            },
         };
         if passes.common_subexpressions {
             if let Some(&existing) = deduplicated.get(&signature) {
@@ -306,6 +311,14 @@ pub fn optimize_with_constants<S: BuildHasher>(
 struct Signature {
     op: Op,
     inputs: Vec<usize>,
+    /// Name of the node, for `Input` only.
+    ///
+    /// Two `Input` nodes with the same shape are *not* interchangeable: each one
+    /// carries a distinct value supplied by the caller. Hashing them together
+    /// merged `w`, `b` and `bias` into a single leaf and produced a graph that
+    /// could not be executed at all. Every other op is a pure function of its
+    /// operands, so its name is irrelevant.
+    leaf: Option<String>,
 }
 
 fn evaluate_constant(node: &Node, operands: &[Tensor]) -> Result<Tensor> {
@@ -386,6 +399,41 @@ mod tests {
         assert_eq!(result.removed_dead, 1);
         assert!(!result.remap.contains_key(&dead.0));
         assert!(result.remap.contains_key(&kept.0));
+    }
+
+    #[test]
+    fn distinct_inputs_are_never_merged() {
+        // Two leaves with the same shape but different names carry different
+        // caller-supplied values. Hashing them as one `(op, inputs)` signature
+        // merged them into a single node, which made the optimised graph
+        // impossible to execute: it asked for `w`'s value to compute `b`.
+        let mut graph = Graph::new();
+        let a = graph.input([2], "a");
+        let b = graph.input([2], "b");
+        let sum = graph.add_node(Op::Add, &[a, b]).unwrap();
+
+        let result = optimize(&graph, &[sum], &Passes::all());
+        assert_eq!(result.removed_duplicates, 0, "{}", result.graph.describe());
+        assert_eq!(result.graph.len(), 3, "{}", result.graph.describe());
+        assert_ne!(result.remap[&a.0], result.remap[&b.0]);
+
+        // Both inputs survive as distinct nodes in the rewritten graph.
+        let leaves: Vec<&str> = result
+            .graph
+            .nodes()
+            .iter()
+            .filter(|node| node.op == Op::Input)
+            .filter_map(|node| node.name.as_deref())
+            .collect();
+        assert_eq!(leaves, vec!["a", "b"]);
+
+        // And it executes with both values supplied, giving the right answer.
+        let mut values = HashMap::new();
+        values.insert(a, Tensor::from_vec(vec![1.0, 2.0], [2]).unwrap());
+        values.insert(b, Tensor::from_vec(vec![10.0, 20.0], [2]).unwrap());
+        let out = NodeId(result.remap[&sum.0]);
+        let execution = result.graph.run(&[out], &values).unwrap();
+        assert_eq!(execution.get(out).unwrap().to_vec(), vec![11.0, 22.0]);
     }
 
     #[test]

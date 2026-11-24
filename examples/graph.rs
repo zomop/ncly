@@ -9,8 +9,9 @@ use ncly::graph::{Graph, Op};
 use ncly::{NclyError, Tensor};
 
 fn main() -> Result<(), NclyError> {
-    // y = tanh(x·w + b); two identical `tanh` nodes are added on purpose so the
-    // optimiser has a duplicate to remove.
+    // y = tanh(x·w + b) + tanh(x·w + b), a duplicate `tanh` added on purpose so
+    // the optimiser has something to merge. `bias` and its `exp` are unreachable
+    // from `y`, which gives dead-code elimination something to remove.
     let mut graph = Graph::new();
     let x = graph.input([4, 3], "x");
     let w = graph.input([3, 2], "w");
@@ -55,8 +56,10 @@ fn main() -> Result<(), NclyError> {
     let execution = graph.run(&[y], &values)?;
     println!("y = {:?}", execution.get(y)?.to_vec());
 
-    // Optimise: `bias` and its `exp` are dead, and the two `tanh` nodes are the
-    // same subexpression.
+    // Optimise. `bias` and its `exp` are dead; the two `tanh` nodes have the same
+    // signature *and* the same input, so CSE collapses them into one. Note that
+    // `w`, `b` and `bias` are three distinct leaves even though `b` and `bias`
+    // share a shape: leaves carry caller-supplied values and are never merged.
     let mut constants = HashMap::new();
     constants.insert(b, values[&b].clone());
     let optimised = optimize_with_constants(&graph, &[y], &Passes::all(), &constants);
@@ -83,6 +86,10 @@ fn main() -> Result<(), NclyError> {
     let again = rewritten.get(new_output)?.to_vec();
     assert_eq!(reference, again);
     println!("optimised graph reproduces the original result exactly.");
+    assert_eq!(
+        optimised.removed_duplicates, 1,
+        "the duplicated tanh should be the only merge"
+    );
     assert!(!optimised.remap.contains_key(&unused.0));
     Ok(())
 }

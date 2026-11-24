@@ -141,7 +141,12 @@ impl Qr {
         out
     }
 
-    /// Form the `m × n` thin `Q` densely (columns of `Q` up to `n`).
+    /// Form the `m × n` thin `Q` densely, **row-major**, keeping the first `n`
+    /// columns.
+    ///
+    /// The layout is row-major, so entry `(k, i)` is `q[k * cols + i]`. The
+    /// columns are orthonormal (`QᵀQ = I_n` to working precision) and the first
+    /// `n` columns of `A` equal `Q·R_thin` exactly, up to rounding.
     pub fn q(&self) -> Vec<f64> {
         let n = self.cols;
         let mut q = vec![0.0; self.rows * n];
