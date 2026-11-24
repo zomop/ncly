@@ -28,3 +28,9 @@ jobs:
           cat /tmp/bench.txt
           # Fail after the log is posted, so the numbers are never lost.
           exit "${status:-0}"
+      - name: check the --json output
+        run: |
+          # `BENCHMARKS.md` documents `--json`, so CI has to prove it parses.
+          # A single filtered case keeps this cheap.
+          cargo run --release -p ncly-benchmarks -- sum --json > /tmp/bench.json
+          python3 scripts/check_bench_json.py /tmp/bench.json
