@@ -235,7 +235,7 @@ pub fn optimize_with_constants(
         }
 
         let signature = Signature {
-            op: node.op,
+            op: node.op.clone(),
             inputs: operands.iter().map(|id| id.0).collect(),
         };
         if passes.common_subexpressions {
@@ -246,14 +246,15 @@ pub fn optimize_with_constants(
             }
         }
 
-        let new_id = match node.op {
-            Op::Input => match node.name.as_deref() {
+        let new_id = if node.op == Op::Input {
+            match node.name.as_deref() {
                 Some(name) => rebuilt.input(node.shape.clone(), name),
                 None => rebuilt.input(node.shape.clone(), format!("input%{index}")),
-            },
-            op => rebuilt
-                .add_node(op, &operands)
-                .unwrap_or_else(|_| rebuilt.input(node.shape.clone(), format!("invalid%{index}"))),
+            }
+        } else {
+            rebuilt
+                .add_node(node.op.clone(), &operands)
+                .unwrap_or_else(|_| rebuilt.input(node.shape.clone(), format!("invalid%{index}")))
         };
         deduplicated.insert(signature, new_id);
         remap.insert(index, new_id.0);
@@ -276,7 +277,7 @@ struct Signature {
 }
 
 fn evaluate_constant(node: &Node, operands: &[Tensor]) -> Result<Tensor> {
-    let value = match node.op {
+    let value = match &node.op {
         Op::Input => {
             return Err(NclyError::Graph {
                 reason: "an input node is never a constant".into(),
@@ -292,10 +293,10 @@ fn evaluate_constant(node: &Node, operands: &[Tensor]) -> Result<Tensor> {
         Op::Tanh => operands[0].tanh(),
         Op::Neg => operands[0].neg(),
         Op::Sum => Tensor::scalar(operands[0].sum()),
-        Op::SumAxis(axis) => operands[0].sum_axis(axis)?,
-        Op::Broadcast(target) => operands[0].broadcast_to(target)?.to_contiguous(),
+        Op::SumAxis(axis) => operands[0].sum_axis(*axis)?,
+        Op::Broadcast(target) => operands[0].broadcast_to(target.clone())?.to_contiguous(),
         Op::Transpose => operands[0].transpose().to_contiguous(),
-        Op::Reshape(target) => operands[0].reshape(target)?,
+        Op::Reshape(target) => operands[0].reshape(target.clone())?,
     };
     Ok(value)
 }

@@ -23,7 +23,7 @@ jobs:
             cargo fmt --all -- --check 2>&1 | head -40 || echo "fmt: differences (autofmt will fix)"
             echo "=== cargo clippy (errors only) ==="
             cargo clippy --workspace --all-targets -- -D warnings 2>&1 \
-              | grep -E '^(error|warning)' | sort | uniq -c | sort -rn | head -40
+              | grep -E -A 4 '^error' | head -120
             echo "=== cargo test ==="
             # `--no-fail-fast` so every failing test in every crate is reported,
             # `--nocapture` so the assertion values are visible.

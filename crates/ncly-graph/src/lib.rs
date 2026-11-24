@@ -59,7 +59,7 @@ impl fmt::Display for NodeId {
 /// An operation in the graph.
 ///
 /// Every variant has a closed-form shape rule, applied by [`Graph::add_node`].
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Op {
     /// A leaf value supplied by the caller.
     Input,
@@ -97,7 +97,7 @@ impl Op {
     /// Number of operands the operation takes.
     ///
     /// Zero for `Input`, two for the binary operations, one otherwise.
-    pub fn arity(self) -> usize {
+    pub fn arity(&self) -> usize {
         match self {
             Op::Input => 0,
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Matmul => 2,
@@ -106,7 +106,7 @@ impl Op {
     }
 
     /// A short name used in diagnostics and in the debug dump.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             Op::Input => "input",
             Op::Add => "add",
@@ -128,12 +128,12 @@ impl Op {
 
     /// True when the operation reads more than one element per output element, so
     /// that a fused implementation would need more than one pass.
-    fn is_reduction(self) -> bool {
+    fn is_reduction(&self) -> bool {
         matches!(self, Op::Sum | Op::SumAxis(_) | Op::Matmul)
     }
 
     /// Cost model used by the scheduler's tie-breaking, in abstract operations.
-    fn cost(self, shape: &[usize]) -> u64 {
+    fn cost(&self, shape: &[usize]) -> u64 {
         let elements = shape.iter().product::<usize>().max(1) as u64;
         match self {
             Op::Matmul => {
@@ -261,7 +261,7 @@ impl Graph {
             }
             operand_shapes.push(self.nodes[id.0].shape.clone());
         }
-        let shape = infer_shape(op, &operand_shapes)?;
+        let shape = infer_shape(&op, &operand_shapes)?;
         self.nodes.push(Node {
             op,
             inputs: inputs.to_vec(),
@@ -363,7 +363,7 @@ impl Graph {
         for level in &mut staged {
             level.sort_by_key(|id| {
                 let node = &self.nodes[id.0];
-                std::cmp::Reverse(Op::cost(node.op, &node.shape))
+                std::cmp::Reverse(node.op.cost(&node.shape))
             });
         }
 
@@ -394,7 +394,7 @@ impl Graph {
                     ),
                 })?
             } else {
-                evaluate(node.op, &node.inputs, &environment)?
+                evaluate(&node.op, &node.inputs, &environment)?
             };
             if output.shape().dims() != node.shape.as_slice() {
                 return Err(NclyError::Graph {
@@ -481,7 +481,7 @@ fn broadcast_binary(lhs: &[usize], rhs: &[usize]) -> Result<Vec<usize>> {
         .to_vec())
 }
 
-fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
+fn infer_shape(op: &Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
     let first = operands.first().map_or(&[][..], Vec::as_slice);
     match op {
         Op::Input => Ok(first.to_vec()),
@@ -522,15 +522,16 @@ fn infer_shape(op: Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
                     format!("inner extent {rhs_inner}"),
                 ));
             }
-            match (lhs.rank(), rhs.rank()) {
+            Ok(match (lhs.rank(), rhs.rank()) {
                 (2, 2) => vec![rows, cols],
                 (1, 2) => vec![cols],
                 (2, 1) => vec![rows],
                 _ => vec![1],
-            }
+            })
         }
         Op::Sum => vec![],
         Op::SumAxis(axis) => {
+            let axis = *axis;
             if axis >= first.len() {
                 return Err(NclyError::InvalidShape {
                     op: "sum_axis",
@@ -580,7 +581,11 @@ fn argument<'a>(environment: &'a HashMap<NodeId, Tensor>, id: NodeId) -> Result<
     })
 }
 
-fn evaluate(op: Op, inputs: &[NodeId], environment: &HashMap<NodeId, Tensor>) -> Result<Tensor> {
+fn evaluate(
+    op: &Op,
+    inputs: &[NodeId],
+    environment: &HashMap<NodeId, Tensor>,
+) -> Result<Tensor> {
     Ok(match op {
         Op::Input => {
             return Err(NclyError::Graph {
@@ -599,14 +604,14 @@ fn evaluate(op: Op, inputs: &[NodeId], environment: &HashMap<NodeId, Tensor>) ->
         Op::Tanh => argument(environment, inputs[0])?.tanh(),
         Op::Neg => argument(environment, inputs[0])?.neg(),
         Op::Sum => Tensor::scalar(argument(environment, inputs[0])?.sum()),
-        Op::SumAxis(axis) => argument(environment, inputs[0])?.sum_axis(axis)?,
-        Op::Broadcast(target) => argument(environment, inputs[0])?
-            .broadcast_to(target)?
-            .to_contiguous(),
-        Op::Transpose => argument(environment, inputs[0])?
-            .transpose()
-            .to_contiguous(),
-        Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target)?,
+        Op::SumAxis(axis) => argument(environment, inputs[0])?.sum_axis(*axis)?,
+        Op::Broadcast(target) => {
+            argument(environment, inputs[0])?
+                .broadcast_to(target.clone())?
+                .to_contiguous()
+        }
+        Op::Transpose => argument(environment, inputs[0])?.transpose().to_contiguous(),
+        Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target.clone())?,
     })
 }
 
