@@ -160,6 +160,7 @@ impl Tape {
     }
 
     /// Primitive value of a node.
+    #[must_use]
     pub fn data(&self, index: usize) -> Tensor {
         self.lock()[index].data.clone()
     }
@@ -175,6 +176,7 @@ impl Tape {
     }
 
     /// Current adjoint of a node.
+    #[must_use]
     pub fn adjoint(&self, index: usize) -> Tensor {
         self.lock()[index].adjoint.clone()
     }
@@ -282,12 +284,14 @@ impl Tape {
 
     /// Render the tape as a list of `index: op(shape) <- parents` lines.
     pub fn describe(&self) -> String {
+        use std::fmt::Write as _;
         let nodes = self.lock();
         let mut out = String::new();
         for (index, node) in nodes.iter().enumerate() {
             let parents: Vec<String> = node.parents.iter().map(|&(p, _)| p.to_string()).collect();
-            out.push_str(&format!(
-                "{index}: {}({}){}{} <- [{}]\n",
+            let _ = writeln!(
+                out,
+                "{index}: {}({}){}{} <- [{}]",
                 node.op,
                 node.data.shape(),
                 if node.is_leaf { " leaf" } else { "" },
@@ -296,7 +300,7 @@ impl Tape {
                     .map(|n| format!(" {n}"))
                     .unwrap_or_default(),
                 parents.join(", ")
-            ));
+            );
         }
         out
     }
@@ -470,6 +474,7 @@ impl Variable {
     }
 
     /// The primal value.
+    #[must_use]
     pub fn value(&self) -> Tensor {
         self.tape.data(self.index)
     }
@@ -484,6 +489,7 @@ impl Variable {
     }
 
     /// The accumulated gradient (zeros before `backward`).
+    #[must_use]
     pub fn grad(&self) -> Tensor {
         self.tape.adjoint(self.index)
     }
@@ -511,7 +517,7 @@ impl Variable {
         // A node whose value is not finite would corrupt the whole sweep, so the
         // check happens here, once, rather than inside every kernel.
         debug_assert!(
-            data.len() == 0 || data.all_finite() || data.has_nan(),
+            data.is_empty() || data.all_finite() || data.has_nan(),
             "ncly-autodiff: {op} produced a mixture of finite and infinite values"
         );
         let index = self.tape.record(op, data, parents);
@@ -526,6 +532,7 @@ impl Variable {
     // -----------------------------------------------------------------
 
     /// Element-wise sum of two variables (with broadcasting).
+    #[must_use]
     pub fn add(&self, rhs: &Variable) -> Variable {
         let data = self
             .value()
@@ -544,6 +551,7 @@ impl Variable {
     }
 
     /// Element-wise subtraction (with broadcasting).
+    #[must_use]
     pub fn sub(&self, rhs: &Variable) -> Variable {
         let data = self
             .value()
@@ -562,6 +570,7 @@ impl Variable {
     }
 
     /// Element-wise product (with broadcasting).
+    #[must_use]
     pub fn mul(&self, rhs: &Variable) -> Variable {
         let (a, b) = (self.value(), rhs.value());
         let data = a.mul(&b).expect("broadcast failed in mul");
@@ -577,6 +586,7 @@ impl Variable {
     }
 
     /// Element-wise division (with broadcasting).
+    #[must_use]
     pub fn div(&self, rhs: &Variable) -> Variable {
         let (a, b) = (self.value(), rhs.value());
         let data = a.div(&b).expect("broadcast failed in div");
@@ -594,6 +604,7 @@ impl Variable {
     }
 
     /// `e^x`.
+    #[must_use]
     pub fn exp(&self) -> Variable {
         let data = self.value().exp();
         let local = data.clone();
@@ -605,6 +616,7 @@ impl Variable {
     }
 
     /// `ln(x)`.
+    #[must_use]
     pub fn ln(&self) -> Variable {
         let value = self.value();
         let data = value.ln();
@@ -617,6 +629,7 @@ impl Variable {
     }
 
     /// `sqrt(x)`.
+    #[must_use]
     pub fn sqrt(&self) -> Variable {
         let data = self.value().sqrt();
         let local = data.muls(2.0).unary(ncly_tensor::UnaryOp::Recip);
@@ -628,6 +641,7 @@ impl Variable {
     }
 
     /// `sin(x)`.
+    #[must_use]
     pub fn sin(&self) -> Variable {
         let data = self.value().sin();
         let local = self.value().cos();
@@ -639,6 +653,7 @@ impl Variable {
     }
 
     /// `cos(x)`.
+    #[must_use]
     pub fn cos(&self) -> Variable {
         let data = self.value().cos();
         let local = self.value().sin().neg();
@@ -650,6 +665,7 @@ impl Variable {
     }
 
     /// `tanh(x)`.
+    #[must_use]
     pub fn tanh(&self) -> Variable {
         let data = self.value().tanh();
         let local = data.mul(&data).expect("square").neg().adds(1.0);
@@ -661,10 +677,11 @@ impl Variable {
     }
 
     /// `x^n`.
+    #[must_use]
     pub fn powi(&self, n: i32) -> Variable {
         let value = self.value();
-        let data = value.powf(n as f64);
-        let local = value.powf((n - 1) as f64).muls(n as f64);
+        let data = value.powf(f64::from(n));
+        let local = value.powf(f64::from(n - 1)).muls(f64::from(n));
         self.record(
             "powi",
             data,
@@ -673,6 +690,7 @@ impl Variable {
     }
 
     /// `x^p` for real `p`.
+    #[must_use]
     pub fn powf(&self, p: f64) -> Variable {
         let value = self.value();
         let data = value.powf(p);
@@ -685,6 +703,7 @@ impl Variable {
     }
 
     /// `|x|`.
+    #[must_use]
     pub fn abs(&self) -> Variable {
         let value = self.value();
         let data = value.abs();
@@ -706,6 +725,7 @@ impl Variable {
     }
 
     /// `1/x`.
+    #[must_use]
     pub fn recip(&self) -> Variable {
         let one = Variable::on_tape(
             &self.tape,
@@ -716,6 +736,7 @@ impl Variable {
     }
 
     /// Element-wise negation.
+    #[must_use]
     pub fn neg(&self) -> Variable {
         let data = self.value().neg();
         let local = Tensor::full(self.value().shape().dims().to_vec(), -1.0);
@@ -727,6 +748,7 @@ impl Variable {
     }
 
     /// Multiply by a constant.
+    #[must_use]
     pub fn scale(&self, scalar: f64) -> Variable {
         let data = self.value().muls(scalar);
         let local = Tensor::full(self.value().shape().dims().to_vec(), scalar);
@@ -738,6 +760,7 @@ impl Variable {
     }
 
     /// Sum over every axis, producing a 0-d variable.
+    #[must_use]
     pub fn sum(&self) -> Variable {
         let value = self.value();
         let total = value.sum();
@@ -751,6 +774,7 @@ impl Variable {
     }
 
     /// Sum one axis (removed from the result).
+    #[must_use]
     pub fn sum_axis(&self, axis: usize) -> Result<Variable> {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
@@ -763,6 +787,7 @@ impl Variable {
     }
 
     /// Sum several axes, keeping the listed ones.
+    #[must_use]
     pub fn sum_axes(&self, axes: &[usize]) -> Result<Variable> {
         let value = self.value();
         let local = Tensor::ones(value.shape().dims().to_vec());
@@ -775,6 +800,7 @@ impl Variable {
     }
 
     /// Mean over every axis.
+    #[must_use]
     pub fn mean(&self) -> Variable {
         let value = self.value();
         let count = value.len();
@@ -791,6 +817,7 @@ impl Variable {
     ///
     /// Reshaping is a bijection on the element sequence, so its adjoint is
     /// another reshape — back to the parent's shape.
+    #[must_use]
     pub fn reshape(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target: Vec<usize> = shape.into();
@@ -807,6 +834,7 @@ impl Variable {
     ///
     /// The adjoint is un-reversed with the same permutation, which is what makes
     /// `(Aᵀ)ᵀ = A` hold in the backward pass.
+    #[must_use]
     pub fn transpose(&self) -> Result<Variable> {
         let value = self.value();
         let data = value.transpose().to_contiguous();
@@ -823,6 +851,7 @@ impl Variable {
     /// The adjoint is summed back down to the operand shape by
     /// the internal `sum_to_shape` helper, which is exactly the transpose
     /// of broadcasting.
+    #[must_use]
     pub fn broadcast_to(&self, shape: impl Into<Vec<usize>>) -> Result<Variable> {
         let value = self.value();
         let target = Shape::new(shape.into());
@@ -836,6 +865,7 @@ impl Variable {
     }
 
     /// Matrix product of two 2-d variables.
+    #[must_use]
     pub fn matmul(&self, rhs: &Variable) -> Result<Variable> {
         let (a, b) = (self.value(), rhs.value());
         let data = a.matmul(&b)?;
@@ -852,6 +882,7 @@ impl Variable {
     }
 
     /// Element-wise natural log of the sum of exponentials over all axes.
+    #[must_use]
     pub fn logsumexp(&self) -> Variable {
         let value = self.value();
         let shift = value.max();
@@ -872,6 +903,7 @@ impl Variable {
     /// Ties are resolved in favour of the left operand, which keeps the
     /// subgradient deterministic. Where the operands are equal the derivative is
     /// genuinely undefined; NCLY does not average the two.
+    #[must_use]
     pub fn maximum(&self, rhs: &Variable) -> Variable {
         let (a, b) = (self.value(), rhs.value());
         let data = a.maximum(&b).expect("broadcast failed in maximum");
@@ -904,6 +936,7 @@ impl Variable {
     }
 
     /// Materialise the primal value.
+    #[must_use]
     pub fn to_tensor(&self) -> Tensor {
         self.value()
     }
@@ -1096,10 +1129,11 @@ mod tests {
         );
         let c = a.matmul(&b).unwrap().sum();
         c.backward();
-        // The loss is sum(A·B), so dL/dA = 1·Bᵀ = ones·Bᵀ. With B = I that is
-        // ones(2,2); dL/dB = Aᵀ·1 = Aᵀ.
+        // sum(A·B) = Σ_ij Σ_k A_ik B_kj, so dL/dA = 1·Bᵀ (rows of ones times Bᵀ)
+        // and dL/dB = Aᵀ·1, i.e. every entry of dB is the sum of the matching
+        // column of A. With A = [[1,2],[3,4]] that is [4, 6] in every row.
         assert_eq!(a.grad().to_vec(), vec![1.0; 4]);
-        assert_eq!(b.grad().to_vec(), vec![1.0, 3.0, 2.0, 4.0]);
+        assert_eq!(b.grad().to_vec(), vec![4.0, 6.0, 4.0, 6.0]);
     }
 
     #[test]

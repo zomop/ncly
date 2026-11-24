@@ -484,7 +484,7 @@ fn broadcast_binary(lhs: &[usize], rhs: &[usize]) -> Result<Vec<usize>> {
 fn infer_shape(op: &Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
     let first = operands.first().map_or(&[][..], Vec::as_slice);
     match op {
-        Op::Input => Ok(first.to_vec()),
+        Op::Input | Op::Exp | Op::Ln | Op::Tanh | Op::Neg => Ok(first.to_vec()),
         Op::Add | Op::Sub | Op::Mul | Op::Div => broadcast_binary(first, &operands[1]),
         Op::Matmul => {
             let lhs = Shape::new(operands[0].clone());
@@ -571,11 +571,10 @@ fn infer_shape(op: &Op, operands: &[Vec<usize>]) -> Result<Vec<usize>> {
             }
             Ok(target.clone())
         }
-        Op::Exp | Op::Ln | Op::Tanh | Op::Neg => Ok(first.to_vec()),
     }
 }
 
-fn argument<'a>(environment: &'a HashMap<NodeId, Tensor>, id: NodeId) -> Result<&'a Tensor> {
+fn argument(environment: &HashMap<NodeId, Tensor>, id: NodeId) -> Result<&Tensor> {
     environment.get(&id).ok_or_else(|| NclyError::Graph {
         reason: format!("operand {id} has no value at execution time"),
     })

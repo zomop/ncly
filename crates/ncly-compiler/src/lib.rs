@@ -160,6 +160,10 @@ pub fn optimize_with_constants(
 
     // --- 2. Constant folding ---------------------------------------------
     let mut known: HashMap<NodeId, Tensor> = HashMap::new();
+    // Nodes whose value is known before execution: a caller-supplied constant, or
+    // an operation whose operands are all in this set. `folded` is the subset that
+    // was *computed* here, which is what gets replaced by a leaf.
+    let mut constant: HashSet<NodeId> = HashSet::new();
     let mut folded: HashSet<NodeId> = HashSet::new();
     let mut folded_count = 0usize;
     if passes.constant_folding {
@@ -171,14 +175,16 @@ pub fn optimize_with_constants(
             let node = &graph.nodes()[index];
             if let Some(value) = constants.get(&id) {
                 known.insert(id, value.clone());
+                constant.insert(id);
                 continue;
             }
             if node.op == Op::Input {
                 continue;
             }
-            // Constant only if every operand is known *and* was itself constant
-            // rather than produced by executing an input-fed subgraph.
-            if node.inputs.iter().all(|parent| folded.contains(parent)) {
+            // Foldable only if *every* operand already has a known value, which
+            // requires each of them to be constant too — an input-fed operand is
+            // not, so it breaks the chain.
+            if node.inputs.iter().all(|parent| constant.contains(parent)) {
                 let operands: Option<Vec<Tensor>> = node
                     .inputs
                     .iter()
@@ -187,6 +193,7 @@ pub fn optimize_with_constants(
                 if let Some(operands) = operands {
                     if let Ok(value) = evaluate_constant(node, &operands) {
                         known.insert(id, value);
+                        constant.insert(id);
                         folded.insert(id);
                         folded_count += 1;
                     }
@@ -401,10 +408,22 @@ mod tests {
         let mut constants = HashMap::new();
         constants.insert(constant, Tensor::from_vec(vec![0.0, 1.0], [2]).unwrap());
         let result = optimize_with_constants(&graph, &[output], &Passes::all(), &constants);
-        // exp, mul and the add are all constant-foldable: the add reads `a`, so
-        // only exp and mul fold.
+        // `exp` and `mul` fold, so the add now reads `a` and a single folded leaf.
+        // The add itself cannot fold because `a` is an input.
         assert_eq!(result.folded, 2);
-        assert_eq!(result.graph.len(), 3); // a, folded leaf, add
+        // Nodes: a, folded `exp`, folded `mul` (merged by CSE into one leaf),
+        // then the surviving add. The caller-supplied constant `c` is dead.
+        assert_eq!(result.graph.len(), 3, "{}", result.graph.describe());
+        assert_eq!(result.removed_dead, 1);
+
+        // Numerical check: the folded leaf equals exp(c) * exp(c).
+        let mut values = HashMap::new();
+        values.insert(a, Tensor::from_vec(vec![1.0, 2.0], [2]).unwrap());
+        let expected = 1.0 + (0.0f64.exp() * 0.0f64.exp());
+        let out = NodeId(result.remap[&output.0]);
+        let execution = result.graph.run(&[out], &values).unwrap();
+        let actual = execution.get(out).unwrap().get(&[0]).unwrap();
+        assert!((actual - expected).abs() < 1e-15, "{actual} vs {expected}");
     }
 
     #[test]
