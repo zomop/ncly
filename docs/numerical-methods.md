@@ -34,7 +34,7 @@ Right-looking elimination:
 
 $$
 u_{ij} = a_{ij} - \sum_{k<i} l_{ik} u_{kj}, \qquad
-l_{ij} = \frac{1}{u_{jj}}\Bigl(a_{ij} - \sum_{k<j} l_{ik} u_{kj}\Bigr)
+l_{ij} = \frac{1}{u_{jj}}\left(a_{ij} - \sum_{k<j} l_{ik} u_{kj}\right)
 $$
 
 **Pivot test.** A column is declared singular when
@@ -62,7 +62,7 @@ refinement, so it cannot rescue a matrix whose growth factor is genuinely large.
 Column-by-column, zero the sub-diagonal with a reflector
 
 $$
-v = x + \operatorname{sign}(x_0)\lVert x\rVert_2 e_0, \qquad
+v = x + \mathrm{sign}(x_0)\lVert x\rVert_2 e_0, \qquad
 H = I - \tau v v^{\mathsf T}, \qquad \tau = \frac{2}{v^{\mathsf T}v},
 $$
 
@@ -82,7 +82,7 @@ reconstruction *and* the solution against a known answer.
 residual norm is
 
 $$
-\lVert b - Ax \rVert_2 = \Bigl\lVert \bigl(Q^{\mathsf T}b\bigr)_{n:m} \Bigr\rVert_2 .
+\lVert b - Ax \rVert_2 = \lVert (Q^{\mathsf T}b)_{n:m} \rVert_2 .
 $$
 
 **Accuracy.** Householder QR is unconditionally backward stable:
@@ -95,7 +95,7 @@ For symmetric positive definite `A = L Lᵀ`:
 
 $$
 \ell_{jj} = \sqrt{a_{jj} - \sum_{k<j}\ell_{jk}^2}, \qquad
-\ell_{ij} = \frac{1}{\ell_{jj}}\Bigl(a_{ij} - \sum_{k<j}\ell_{ik}\ell_{jk}\Bigr).
+\ell_{ij} = \frac{1}{\ell_{jj}}\left(a_{ij} - \sum_{k<j}\ell_{ik}\ell_{jk}\right).
 $$
 
 A negative radicand is a *proof* of indefiniteness (up to rounding), reported as
@@ -112,7 +112,7 @@ equations system, a stiffness matrix, a kernel matrix.
 Repeatedly zero one off-diagonal entry with a plane rotation `G(p,q,θ)`:
 
 $$
-\theta = \tfrac12\operatorname{atan2}\!\left(2a_{pq},\; a_{qq}-a_{pp}\right),
+\theta = \tfrac12\mathrm{atan2}\left(2a_{pq},\; a_{qq}-a_{pp}\right),
 \qquad A \leftarrow G^{\mathsf T} A G .
 $$
 
