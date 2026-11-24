@@ -581,11 +581,7 @@ fn argument<'a>(environment: &'a HashMap<NodeId, Tensor>, id: NodeId) -> Result<
     })
 }
 
-fn evaluate(
-    op: &Op,
-    inputs: &[NodeId],
-    environment: &HashMap<NodeId, Tensor>,
-) -> Result<Tensor> {
+fn evaluate(op: &Op, inputs: &[NodeId], environment: &HashMap<NodeId, Tensor>) -> Result<Tensor> {
     Ok(match op {
         Op::Input => {
             return Err(NclyError::Graph {
@@ -605,12 +601,12 @@ fn evaluate(
         Op::Neg => argument(environment, inputs[0])?.neg(),
         Op::Sum => Tensor::scalar(argument(environment, inputs[0])?.sum()),
         Op::SumAxis(axis) => argument(environment, inputs[0])?.sum_axis(*axis)?,
-        Op::Broadcast(target) => {
-            argument(environment, inputs[0])?
-                .broadcast_to(target.clone())?
-                .to_contiguous()
-        }
-        Op::Transpose => argument(environment, inputs[0])?.transpose().to_contiguous(),
+        Op::Broadcast(target) => argument(environment, inputs[0])?
+            .broadcast_to(target.clone())?
+            .to_contiguous(),
+        Op::Transpose => argument(environment, inputs[0])?
+            .transpose()
+            .to_contiguous(),
         Op::Reshape(target) => argument(environment, inputs[0])?.reshape(target.clone())?,
     })
 }
