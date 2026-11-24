@@ -40,6 +40,11 @@ jobs:
             echo "=== gates ==="
             cargo build --workspace --all-targets --quiet 2>&1 \
               || { echo "GATE FAILED: cargo build"; status=1; }
+            # Clippy is a gate, not just a diagnostic: it sat in the log pipeline
+            # above for several rounds while failing, which is how two real lints
+            # reached a pull request.
+            cargo clippy --workspace --all-targets --quiet -- -D warnings 2>&1 \
+              || { echo "GATE FAILED: cargo clippy"; status=1; }
             cargo test --workspace --quiet 2>&1 \
               || { echo "GATE FAILED: cargo test"; status=1; }
             RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet 2>&1 \

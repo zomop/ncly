@@ -381,9 +381,10 @@ fn sum_to_shape(value: &Tensor, target: &Shape) -> Result<Tensor> {
 
 thread_local! {
     /// Tape used by [`Variable::auto`] when a leaf joins the current recording.
-    // `const { .. }` in a `static` initializer is Rust 1.79; plain `RefCell::new`
-    // is const since 1.0-far-earlier, so this keeps the declared 1.75 MSRV.
-    static CURRENT_TAPE: RefCell<Option<Tape>> = RefCell::new(None);
+    // The `const { .. }` form here is `thread_local!` macro syntax, stable since
+    // 1.59 — not a `static` item initializer, which would need 1.79. Clippy asks
+    // for it because it lets the value be a `const` rather than a lazy call.
+    static CURRENT_TAPE: RefCell<Option<Tape>> = const { RefCell::new(None) };
 }
 
 /// A handle to a differentiable value.

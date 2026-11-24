@@ -153,6 +153,112 @@ struct Folding {
     folded: HashSet<NodeId>,
 }
 
+/// Rebuild `graph`, baking known values into leaves and merging duplicates.
+///
+/// One forward pass, because node ids are a topological order: by the time a node
+/// is visited, every operand has already been placed in the new graph or dropped.
+#[allow(clippy::too_many_lines)] // one linear pass reads better than three helpers
+fn rebuild(
+    graph: &Graph,
+    live: &HashSet<NodeId>,
+    needed: &HashSet<NodeId>,
+    known: &HashMap<NodeId, Tensor>,
+    folded: &HashSet<NodeId>,
+    passes: &Passes,
+) -> Rebuilt {
+    let mut rebuilt = Graph::new();
+    let mut remap: HashMap<usize, usize> = HashMap::new();
+    let mut deduplicated: BTreeMap<Signature, NodeId> = BTreeMap::new();
+    let mut removed_duplicates = 0usize;
+
+    for index in 0..graph.len() {
+        let id = NodeId(index);
+        if !live.contains(&id) && passes.dead_code {
+            continue;
+        }
+        // Dropped because folding made it unreachable; it is not a dead-code
+        // removal, which is why it is not counted in `removed_dead`.
+        if passes.constant_folding && !needed.contains(&id) {
+            continue;
+        }
+        let node = &graph.nodes()[index];
+
+        // Every node with a known value becomes a leaf with that value baked in:
+        // both the operations evaluated here and the caller's constant leaves.
+        // Baking the leaves too is what makes `constants` mean "compile-time
+        // constant" rather than "value the caller must remember to pass again".
+        if let Some(value) = known.get(&id) {
+            let shape = value.shape().dims().to_vec();
+            let name = if folded.contains(&id) {
+                match node.name.as_deref() {
+                    Some(name) => format!("{name}[folded]"),
+                    None => format!("{}[folded]", node.op.name()),
+                }
+            } else {
+                // A caller-supplied constant keeps its name; it is the same value.
+                match node.name.as_deref() {
+                    Some(name) => name.to_string(),
+                    None => format!("{}[constant]", node.op.name()),
+                }
+            };
+            let new_id = rebuilt.folded_leaf(shape, value.clone(), name);
+            remap.insert(index, new_id.0);
+            continue;
+        }
+
+        let mut operands = Vec::with_capacity(node.inputs.len());
+        let mut missing = false;
+        for parent in &node.inputs {
+            match remap.get(&parent.0) {
+                Some(&new_parent) => operands.push(NodeId(new_parent)),
+                None => {
+                    missing = true;
+                    break;
+                }
+            }
+        }
+        if missing {
+            continue;
+        }
+
+        let signature = Signature {
+            op: node.op.clone(),
+            inputs: operands.iter().map(|id| id.0).collect(),
+            leaf: if node.op == Op::Input {
+                node.name.clone()
+            } else {
+                None
+            },
+        };
+        if passes.common_subexpressions {
+            if let Some(&existing) = deduplicated.get(&signature) {
+                remap.insert(index, existing.0);
+                removed_duplicates += 1;
+                continue;
+            }
+        }
+
+        let new_id = if node.op == Op::Input {
+            match node.name.as_deref() {
+                Some(name) => rebuilt.input(node.shape.clone(), name),
+                None => rebuilt.input(node.shape.clone(), format!("input%{index}")),
+            }
+        } else {
+            rebuilt
+                .add_node(node.op.clone(), &operands)
+                .unwrap_or_else(|_| rebuilt.input(node.shape.clone(), format!("invalid%{index}")))
+        };
+        deduplicated.insert(signature, new_id);
+        remap.insert(index, new_id.0);
+    }
+
+    Rebuilt {
+        graph: rebuilt,
+        remap,
+        removed_duplicates,
+    }
+}
+
 /// Evaluate every subgraph whose operands are all known at compile time.
 ///
 /// A node folds only when each of its operands is already constant, so an
@@ -196,6 +302,13 @@ fn fold_constants<S: BuildHasher>(
         }
     }
     folding
+}
+
+/// A graph rewritten in one forward pass, plus what the passes removed.
+struct Rebuilt {
+    graph: Graph,
+    remap: HashMap<usize, usize>,
+    removed_duplicates: usize,
 }
 
 /// Nodes still needed in the *rebuilt* graph.
@@ -282,95 +395,12 @@ pub fn optimize_with_constants<S: BuildHasher>(
     };
 
     // --- 3. Rebuild with CSE ---------------------------------------------
-    let mut rebuilt = Graph::new();
-    let mut remap: HashMap<usize, usize> = HashMap::new();
-    let mut deduplicated: BTreeMap<Signature, NodeId> = BTreeMap::new();
-    let mut removed_duplicates = 0usize;
-
-    for index in 0..graph.len() {
-        let id = NodeId(index);
-        if !live.contains(&id) && passes.dead_code {
-            continue;
-        }
-        // Dropped because folding made it unreachable; it is not a dead-code
-        // removal, which is why it is not counted in `removed_dead`.
-        if passes.constant_folding && !needed.contains(&id) {
-            continue;
-        }
-        let node = &graph.nodes()[index];
-
-        // Every node with a known value becomes a leaf with that value baked in:
-        // both the operations evaluated here and the caller's constant leaves.
-        // Baking the leaves too is what makes `constants` mean "compile-time
-        // constant" rather than "value the caller must remember to pass again".
-        if known.contains_key(&id) {
-            let value = known[&id].clone();
-            let shape = value.shape().dims().to_vec();
-            let name = if folded.contains(&id) {
-                match node.name.as_deref() {
-                    Some(name) => format!("{name}[folded]"),
-                    None => format!("{}[folded]", node.op.name()),
-                }
-            } else {
-                // A caller-supplied constant keeps its name; it is the same value.
-                match node.name.as_deref() {
-                    Some(name) => name.to_string(),
-                    None => format!("{}[constant]", node.op.name()),
-                }
-            };
-            let new_id = rebuilt.folded_leaf(shape, value, name);
-            remap.insert(index, new_id.0);
-            continue;
-        }
-
-        let mut operands = Vec::with_capacity(node.inputs.len());
-        let mut missing = false;
-        for parent in &node.inputs {
-            if let Some(&new_parent) = remap.get(&parent.0) {
-                operands.push(NodeId(new_parent));
-            } else {
-                missing = true;
-                break;
-            }
-        }
-        if missing {
-            continue;
-        }
-
-        let signature = Signature {
-            op: node.op.clone(),
-            inputs: operands.iter().map(|id| id.0).collect(),
-            leaf: if node.op == Op::Input {
-                node.name.clone()
-            } else {
-                None
-            },
-        };
-        if passes.common_subexpressions {
-            if let Some(&existing) = deduplicated.get(&signature) {
-                remap.insert(index, existing.0);
-                removed_duplicates += 1;
-                continue;
-            }
-        }
-
-        let new_id = if node.op == Op::Input {
-            match node.name.as_deref() {
-                Some(name) => rebuilt.input(node.shape.clone(), name),
-                None => rebuilt.input(node.shape.clone(), format!("input%{index}")),
-            }
-        } else {
-            rebuilt
-                .add_node(node.op.clone(), &operands)
-                .unwrap_or_else(|_| rebuilt.input(node.shape.clone(), format!("invalid%{index}")))
-        };
-        deduplicated.insert(signature, new_id);
-        remap.insert(index, new_id.0);
-    }
+    let rebuilt = rebuild(graph, &live, &needed, &known, &folded, passes);
+    let removed_duplicates = rebuilt.removed_duplicates;
 
     Optimized {
-        graph: rebuilt,
-        remap,
+        graph: rebuilt.graph,
+        remap: rebuilt.remap,
         removed_dead,
         removed_duplicates,
         folded: folded_count,
