@@ -152,7 +152,12 @@ fn fully_constant_subgraph_is_baked_into_a_leaf() {
         .zip(x_value.to_vec())
         .map(|(folded, extra)| folded + extra)
         .collect();
-    assert_close(&actual, &expected, 1e-14, "baked constant vs the tensor API");
+    assert_close(
+        &actual,
+        &expected,
+        1e-14,
+        "baked constant vs the tensor API",
+    );
 }
 
 #[test]
@@ -161,7 +166,10 @@ fn scheduling_is_deterministic_and_respects_dependencies() {
     let (_, _, output) = build(&mut graph);
     let first = graph.plan(&[output]).unwrap();
     let second = graph.plan(&[output]).unwrap();
-    assert_eq!(first.order, second.order, "scheduling must be deterministic");
+    assert_eq!(
+        first.order, second.order,
+        "scheduling must be deterministic"
+    );
 
     let mut position = HashMap::new();
     for (index, id) in first.order.iter().enumerate() {
