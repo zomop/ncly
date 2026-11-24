@@ -385,9 +385,16 @@ fn two_by_two(h: &[f64], n: usize, start: usize) -> (f64, f64, f64, f64) {
     let discriminant = trace * trace - 4.0 * det;
     if discriminant >= 0.0 {
         let root = discriminant.sqrt();
-        // Numerically stable form.
-        let q = -0.5 * (trace + trace.signum() * root);
+        // Numerically stable form of the quadratic formula: adding the root with
+        // the *sign of the trace* avoids the cancellation that subtracting it
+        // would cause when `trace` and `root` are close.
+        //
+        // The subtraction that follows is deliberate (`clippy::suboptimal_flops`
+        // would rewrite it as an addition and flip the sign of the root).
+        #[allow(clippy::suboptimal_flops)]
+        let q = 0.5 * (trace + trace.signum() * root);
         let l1 = if q == 0.0 { 0.0 } else { q };
+        // Vieta: the product of the roots is the determinant.
         let l2 = if q == 0.0 { 0.0 } else { det / q };
         (l1, 0.0, l2, 0.0)
     } else {
@@ -397,7 +404,6 @@ fn two_by_two(h: &[f64], n: usize, start: usize) -> (f64, f64, f64, f64) {
     }
 }
 
-/// One shifted QR step on the Hessenberg window via Givens rotations.
 /// One implicit-shifted QR step (Francis single shift) on the active window
 /// `[low, high]` of an upper Hessenberg matrix.
 ///
@@ -427,8 +433,10 @@ fn implicit_qr_step(h: &mut [f64], n: usize, low: usize, high: usize, shift: f64
             h[k * n + j] = c * upper + s * lower;
             h[(k + 1) * n + j] = -s * upper + c * lower;
         }
-        // Right: columns `k`, `k+1`, over the rows the bulge can reach.
-        for i in 0..(high + 2).min(n) {
+        // Right: columns `k`, `k+1`, over the rows the bulge can reach. Rows
+        // below `k+2` are zero there already; touching them would push mass back
+        // into the subdiagonal this rotation just cleared.
+        for i in 0..(k + 2).min(high) + 1 {
             let left = h[i * n + k];
             let right = h[i * n + k + 1];
             h[i * n + k] = c * left + s * right;
@@ -442,12 +450,11 @@ fn implicit_qr_step(h: &mut [f64], n: usize, low: usize, high: usize, shift: f64
     }
 }
 
-/// Givens rotation `(s, c)` zeroing `b` against `a`.
 /// Givens rotation `(c, s)` with `c·f + s·g = r` and `-s·f + c·g = 0`.
 ///
-/// The magnitude is normalised with the larger of `|f|` and `|g|` so the result
-/// cannot overflow; the signs of `(f, g)` are irrelevant because the rotation is
-/// used on both sides of a similarity transform.
+/// The magnitude is normalised so the result cannot overflow; the signs of
+/// `(f, g)` are irrelevant because the rotation is used on both sides of a
+/// similarity transform.
 fn rotation(f: f64, g: f64) -> (f64, f64) {
     if g == 0.0 {
         return (1.0, 0.0);
@@ -543,6 +550,7 @@ mod tests {
         //   -2.196856, -2.196856, -1.846219, 0.640739, 1.710028
         // with a complex pair present.
         #[rustfmt::skip]
+        #[allow(clippy::unreadable_literal)] // a matrix literal reads better ungrouped
         let a = [
             -0.704669, -1.396603,  0.603738, -1.710255,  0.143528,
             -0.537244, -1.768004,  0.029743, -1.850017, -0.265417,

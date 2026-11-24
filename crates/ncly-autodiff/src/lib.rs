@@ -19,10 +19,10 @@
 //! ```
 //! use ncly_autodiff::Dual;
 //!
-//! // f(x) = sin(x^2) at x = 1.5
+//! // f(x) = sin(x^2) at x = 1.5 ; f'(x) = 2x·cos(x^2)
 //! let x = Dual::variable(1.5);
 //! let y = (x * x).sin();
-//! assert!((y.tangent - 2.0 * 1.5 * 1.5f64.cos()).abs() < 1e-14);
+//! assert!((y.tangent - 2.0 * 1.5 * (1.5f64 * 1.5).cos()).abs() < 1e-14);
 //! ```
 //!
 //! # Reverse mode — [`Tape`] and [`Variable`]
@@ -40,8 +40,8 @@
 //! loss.backward();
 //!
 //! // d/dx (xy)^2 = 2x y^2 = 36 ; d/dy = 2 x^2 y = 24
-//! assert!((x.grad() - 36.0).abs() < 1e-12);
-//! assert!((y.grad() - 24.0).abs() < 1e-12);
+//! assert!((x.grad_scalar().unwrap() - 36.0).abs() < 1e-12);
+//! assert!((y.grad_scalar().unwrap() - 24.0).abs() < 1e-12);
 //! ```
 //!
 //! # Correctness strategy

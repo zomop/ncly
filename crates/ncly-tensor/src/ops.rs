@@ -937,7 +937,8 @@ mod tests {
         let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]).unwrap();
         let at = a.transpose();
         let doubled = at.muls(2.0).add(&at).unwrap();
-        assert_eq!(doubled.to_vec(), vec![3.0, 6.0, 9.0, 12.0, 18.0, 24.0]);
+        // aᵀ = [[1, 4], [2, 5], [3, 6]] read in row-major order, times three.
+        assert_eq!(doubled.to_vec(), vec![3.0, 12.0, 6.0, 15.0, 9.0, 18.0]);
     }
 
     #[test]
@@ -1041,7 +1042,7 @@ mod collapse_tests {
         // The same view broadcast against a row vector.
         let row = Tensor::from_vec(vec![10.0, 20.0], [2]).unwrap();
         let out = at.add(&row).unwrap();
-        assert_eq!(out.to_vec(), vec![11.0, 24.0, 13.0, 26.0, 15.0, 28.0]);
+        assert_eq!(out.to_vec(), vec![11.0, 24.0, 12.0, 25.0, 13.0, 26.0]);
     }
 
     #[test]
@@ -1075,6 +1076,8 @@ mod collapse_tests {
         );
         let ones = Tensor::ones([2, 2]);
         let out = tensor.add(&ones).unwrap();
-        assert_eq!(out.to_vec(), vec![1.0, 3.0, 11.0, 13.0]);
+        // Strides (5, 2) read storage indices 0, 2, 5, 7 — so the result is
+        // 1, 3, 6, 8 in row-major order, *not* the contiguous 1, 3, 11, 13.
+        assert_eq!(out.to_vec(), vec![1.0, 3.0, 6.0, 8.0]);
     }
 }
