@@ -320,9 +320,11 @@ Runnable files live in [`examples/`](examples):
 | `autodiff.rs` | forward vs reverse mode on the same function |
 | `linalg.rs` | LU, QR least squares, Cholesky, eigenvalues |
 | `sparse.rs` | assembling a 1-d Laplacian and multiplying |
+| `graph.rs` | a dataflow graph, its schedule, and the optimiser's effect |
 
 ```bash
 cargo run --release --example tensors
+cargo run --release --example graph
 ```
 
 ## Python examples
@@ -330,7 +332,8 @@ cargo run --release --example tensors
 ```python
 import ncly
 
-x = ncly.Tensor([1.0, 2.0, 3.0], requires_grad=True)
+# `requires_grad()` opts the tensor into the tape; it is a method, not a flag.
+x = ncly.Tensor([1.0, 2.0, 3.0]).requires_grad()
 y = (x * x).sum()
 y.backward()
 print(x.grad.tolist())      # [2.0, 4.0, 6.0]
