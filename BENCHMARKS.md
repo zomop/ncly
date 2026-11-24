@@ -31,31 +31,31 @@ cargo run --release -p ncly-benchmarks -- --json  # machine-readable
 
 | kernel | size | median | best | GFLOP/s | GiB/s |
 | --- | --- | ---: | ---: | ---: | ---: |
-| axpy (`y = 2a + b`) | n=2^20 | 0.453 ms | 0.402 ms | 6.95 | 51.79 |
-| tensor add (1-d) | n=2^20 | 2.411 ms | 2.346 ms | 0.43 | 9.72 |
-| exp (1-d) | n=2^20 | 6.215 ms | 6.184 ms | 1.35 | 2.51 |
-| sum (1-d) | n=2^20 | 1.750 ms | 1.738 ms | 0.60 | 4.46 |
-| matmul (f64, square) | 64x64 | 0.061 ms | 0.061 ms | 8.54 | — |
-| matmul (f64, square) | 128x128 | 0.487 ms | 0.482 ms | 8.62 | — |
-| matmul (f64, square) | 256x256 | 4.552 ms | 4.518 ms | 7.37 | — |
-| matmul (f64, square) | 512x512 | 57.855 ms | 57.615 ms | 4.64 | — |
-| LU factorisation | 256x256 | 1.595 ms | 1.585 ms | 7.01 | — |
-| spmv (1-d Laplacian) | n=200000, nnz=399999 | 1.027 ms | 1.019 ms | 0.78 | 8.71 |
-| autodiff fwd+bwd (`exp·sin`) | n=4096 | 0.426 ms | 0.180 ms | 0.08 | — |
-| transpose + materialise | 1024x1024 | 7.252 ms | 6.357 ms | — | 2.15 |
-| graph: unoptimised run | n=2^16, 6 nodes | 1.564 ms | 1.551 ms | — | — |
-| graph: after folding/CSE/DCE | n=2^16, 5 nodes, folded=2, cse=1, dce=0 | 1.175 ms | 1.167 ms | — | — |
+| axpy (`y = 2a + b`) | n=2^20 | 0.470 ms | 0.445 ms | 6.69 | 49.86 |
+| tensor add (1-d) | n=2^20 | 2.399 ms | 2.353 ms | 0.44 | 9.77 |
+| exp (1-d) | n=2^20 | 6.205 ms | 6.180 ms | 1.35 | 2.52 |
+| sum (1-d) | n=2^20 | 1.754 ms | 1.739 ms | 0.60 | 4.45 |
+| matmul (f64, square) | 64x64 | 0.061 ms | 0.061 ms | 8.53 | — |
+| matmul (f64, square) | 128x128 | 0.486 ms | 0.478 ms | 8.62 | — |
+| matmul (f64, square) | 256x256 | 4.468 ms | 4.415 ms | 7.51 | — |
+| matmul (f64, square) | 512x512 | 60.340 ms | 58.610 ms | 4.45 | — |
+| LU factorisation | 256x256 | 1.607 ms | 1.592 ms | 6.96 | — |
+| spmv (1-d Laplacian) | n=200000, nnz=399999 | 1.025 ms | 1.019 ms | 0.78 | 8.72 |
+| autodiff fwd+bwd (`exp·sin`) | n=4096 | 0.421 ms | 0.181 ms | 0.08 | — |
+| transpose + materialise | 1024x1024 | 6.645 ms | 6.448 ms | — | 2.35 |
+| graph: unoptimised run | n=2^16, 6 nodes | 1.577 ms | 1.558 ms | — | — |
+| graph: after folding/CSE/DCE | n=2^16, 4 nodes, folded=2 | 1.187 ms | 1.166 ms | — | — |
 
 ## What the numbers say
 
 These are *observations from the table*, not projections:
 
-- **matmul sits at 7.4–8.6 GFLOP/s for 64–256 and drops to 4.6 at 512.** The
+- **matmul sits at 7.5–8.6 GFLOP/s for 64–256 and drops to 4.5 at 512.** The
   single-threaded AVX2 peak for `fma` on this core is far higher, so the kernel is
   limited by memory traffic and lack of register blocking. The drop at 512 is
   where the row of `B` no longer fits in L2. This is the clearest evidence that a
   blocked/threaded GEMM is the highest-value optimisation left.
-- **`axpy` reaches 51.8 GiB/s while `tensor add` reaches 9.7 GiB/s** for the same
+- **`axpy` reaches 49.9 GiB/s while `tensor add` reaches 9.8 GiB/s** for the same
   element count. The gap is the cost of the broadcast/plan machinery around the
   kernel: `axpy` calls the SIMD kernel directly, `tensor add` builds a
   `Broadcast` plan and collapses axes first. Note also that the two are timed
@@ -74,13 +74,16 @@ These are *observations from the table*, not projections:
   `col_idx`, which is why sparse kernels are latency-bound rather than
   bandwidth-bound.
 - **The optimiser pays off, modestly, on a graph it can fold.** The same graph
-  runs in 1.564 ms unoptimised and 1.175 ms after folding/CSE — about 25% faster —
-  and it no longer needs the constant `c` supplied at run time, because folding
-  baked it into a leaf. On this graph, with `n = 2^16`, the run is dominated by
-  `tanh` and the element-wise add over the data, so 25% is the *upper* bound of
-  what the passes can buy here; a graph with more repeated constant arithmetic
-  would gain more. This is the only measured claim about the optimiser, and it is
-  one graph on one machine.
+  runs in 1.577 ms unoptimised and 1.187 ms after folding — about 25% faster — and
+  the optimised graph has 4 nodes instead of 6 and needs no constants supplied at
+  run time, because both folded operations and the constant leaf are baked in. The
+  remaining work over `n = 2^16` elements is a `tanh` and an element-wise add, so
+  25% is close to the most these passes could buy here; a graph with more repeated
+  constant arithmetic would gain more. This is the only measured claim about the
+  optimiser, and it is one graph on one machine.
+- **The `matmul` figures vary run to run.** Across four runs on the same host the
+  256×256 case measured 4.47–4.80 ms and the 512×512 case 56.9–60.3 ms. The
+  table above is a single run; treat ±10% as the noise floor.
 - **`autodiff fwd+bwd` shows a 2.4x spread between best and median**, which is a
   scheduling artefact on a shared runner rather than a property of the code. The
   case includes tape recording and the backward sweep, so it is a pipeline number,

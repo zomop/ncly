@@ -86,8 +86,8 @@ documentation says plainly that it is missing.
 
 Exit criterion: a benchmark showing the passes reduce time, with the numbers
 recorded in `BENCHMARKS.md`. Met as far as the current graph allows: on a graph
-with a repeated constant subexpression the optimised run is **1.175 ms against
-1.564 ms** unoptimised (AMD EPYC 7763, `n = 2^16`), and it no longer requires the
+with a repeated constant subexpression the optimised run is **1.187 ms against
+1.577 ms** unoptimised (AMD EPYC 7763, `n = 2^16`), and it no longer requires any
 constant as a run-time input. That is one graph on one machine; DCE and CSE are
 covered by unit tests rather than by a timing, and no timing is claimed for them.
 
