@@ -699,9 +699,7 @@ fn collect(
         }
         std::cmp::Ordering::Less => {}
         std::cmp::Ordering::Equal => shape.push(length),
-        std::cmp::Ordering::Greater => {
-            return Err(PyValueError::new_err("ragged nested sequence"))
-        }
+        std::cmp::Ordering::Greater => return Err(PyValueError::new_err("ragged nested sequence")),
     }
     for item in items {
         collect(&item, values, shape, depth + 1)?;
