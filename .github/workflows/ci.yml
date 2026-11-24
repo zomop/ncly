@@ -59,7 +59,7 @@ jobs:
             done < /tmp/errs.txt
           fi
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: log-clippy
@@ -92,7 +92,7 @@ jobs:
           python3 .github/ci/post_log.py /tmp/log.txt
           tail -80 /tmp/log.txt
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: log-test-${{ matrix.os }}
@@ -132,7 +132,7 @@ jobs:
             done < /tmp/errs.txt
           fi
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: log-msrv
