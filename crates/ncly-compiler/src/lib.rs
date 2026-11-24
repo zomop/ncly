@@ -99,11 +99,19 @@ pub struct Optimized {
     pub graph: Graph,
     /// Old node index to new node index. Nodes removed by a pass are absent.
     pub remap: HashMap<usize, usize>,
-    /// Number of nodes removed as dead.
+    /// Number of nodes that were unreachable in the input graph and were thus
+    /// excluded from the rebuilt one.
+    ///
+    /// Folding can also drop a node (a constant whose only consumers were folded),
+    /// and that is *not* counted here: it is a consequence of folding, and folding
+    /// is reported through [`Optimized::folded`].
     pub removed_dead: usize,
     /// Number of nodes merged into an existing equivalent node.
     pub removed_duplicates: usize,
-    /// Number of operations evaluated at compile time.
+    /// Number of operations that were evaluated at compile time.
+    ///
+    /// Caller-supplied constants are not operations and are not counted; they are
+    /// baked into leaves all the same.
     pub folded: usize,
 }
 
@@ -126,7 +134,11 @@ impl Optimized {
             .collect()
     }
 
-    /// How many nodes the graph lost.
+    /// How many nodes the graph lost to dead-code elimination and CSE.
+    ///
+    /// Folding also shrinks the graph, but it replaces a subgraph rather than
+    /// deleting nodes one by one, so it is not included: compare
+    /// `graph.len()` with the input graph if you need the total.
     pub fn nodes_removed(&self) -> usize {
         self.removed_dead + self.removed_duplicates
     }

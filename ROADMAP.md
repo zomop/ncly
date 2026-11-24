@@ -74,9 +74,9 @@ Two details are easy to get wrong and are covered by regression tests:
   a constant whose every consumer folded disappears completely, rather than
   lingering as a node nobody reads.
 
-`Optimized::removed_dead` counts dead nodes in the *input* graph; a constant that
-disappears because the subgraph consuming it was folded is reported through
-`folded`, not through `removed_dead`.
+`Optimized::removed_dead` counts nodes that were already unreachable in the
+*input* graph. A constant that disappears because every consumer was folded is a
+consequence of folding, not of dead-code elimination, so it is not counted there.
 
 **Fusion is out of scope for now.** Emitting `exp → mul → sum` as one pass over
 memory requires either a fused kernel in `ncly-simd` for each supported pattern
