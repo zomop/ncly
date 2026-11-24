@@ -217,7 +217,7 @@ impl Tape {
                 continue;
             }
             let adjoint = nodes[cursor].adjoint.clone();
-            if adjoint.len() == 0 {
+            if adjoint.is_empty() {
                 continue;
             }
             // Collect first to avoid holding a borrow while indexing parents.

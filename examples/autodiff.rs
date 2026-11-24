@@ -4,8 +4,6 @@
 //!
 //! Run with: `cargo run --release --example autodiff`
 
-use std::ops::Add;
-
 use ncly::autodiff::{Dual, Tape, Variable};
 use ncly::{NclyError, Tensor};
 
@@ -16,12 +14,12 @@ fn main() -> Result<(), NclyError> {
     let dx = {
         let x = Dual::with_tangent(x0, 1.0);
         let y = Dual::with_tangent(y0, 0.0);
-        (x * y).sin().add(x * x * y).tangent
+        ((x * y).sin() + x * x * y).tangent
     };
     let dy = {
         let x = Dual::with_tangent(x0, 0.0);
         let y = Dual::with_tangent(y0, 1.0);
-        (x * y).sin().add(x * x * y).tangent
+        ((x * y).sin() + x * x * y).tangent
     };
     println!("forward   ∂f/∂x = {dx:.12}");
     println!("forward   ∂f/∂y = {dy:.12}");

@@ -130,7 +130,7 @@ impl Dual {
         let value = self.value.powi(n);
         Self {
             value,
-            tangent: self.tangent * n as f64 * self.value.powi(n - 1),
+            tangent: self.tangent * f64::from(n) * self.value.powi(n - 1),
         }
     }
 
@@ -244,34 +244,45 @@ impl AddAssign for Dual {
     }
 }
 
+/// Implement the four arithmetic operators between `Dual` and a primitive.
+///
+/// Every instantiation is for a type whose conversion to `f64` is lossless, so
+/// the macro takes a conversion expression as its second parameter. Keeping the
+/// conversion explicit is what lets `i64`/`u64`/`usize` participate without a
+/// silent precision loss: those pass `<ty>::to_f64` semantics in the form of a
+/// cast that is documented as approximate.
 macro_rules! dual_scalar_ops {
-    ($($ty:ty),*) => {$(
+    ($($ty:ty => $to:expr),* $(,)?) => {$(
         impl Add<$ty> for Dual {
             type Output = Dual;
             #[inline]
             fn add(self, rhs: $ty) -> Dual {
-                Dual { value: self.value + rhs as f64, tangent: self.tangent }
+                let rhs: f64 = ($to)(rhs);
+                Dual { value: self.value + rhs, tangent: self.tangent }
             }
         }
         impl Sub<$ty> for Dual {
             type Output = Dual;
             #[inline]
             fn sub(self, rhs: $ty) -> Dual {
-                Dual { value: self.value - rhs as f64, tangent: self.tangent }
+                let rhs: f64 = ($to)(rhs);
+                Dual { value: self.value - rhs, tangent: self.tangent }
             }
         }
         impl Mul<$ty> for Dual {
             type Output = Dual;
             #[inline]
             fn mul(self, rhs: $ty) -> Dual {
-                Dual { value: self.value * rhs as f64, tangent: self.tangent * rhs as f64 }
+                let rhs: f64 = ($to)(rhs);
+                Dual { value: self.value * rhs, tangent: self.tangent * rhs }
             }
         }
         impl Div<$ty> for Dual {
             type Output = Dual;
             #[inline]
             fn div(self, rhs: $ty) -> Dual {
-                Dual { value: self.value / rhs as f64, tangent: self.tangent / rhs as f64 }
+                let rhs: f64 = ($to)(rhs);
+                Dual { value: self.value / rhs, tangent: self.tangent / rhs }
             }
         }
         impl Add<Dual> for $ty {
@@ -287,7 +298,11 @@ macro_rules! dual_scalar_ops {
     )*};
 }
 
-dual_scalar_ops!(f32, f64, i32, i64, u32, usize);
+// Lossless: every value of these types is exactly representable in `f64`.
+dual_scalar_ops!(f32 => f64::from, f64 => |v: f64| v, i32 => f64::from, u32 => f64::from);
+// Not lossless in general (`i64`/`usize` exceed 2^53), so the cast is explicit
+// and documented rather than hidden behind `From`.
+dual_scalar_ops!(i64 => |v: i64| v as f64, u64 => |v: u64| v as f64, usize => |v: usize| v as f64);
 
 impl fmt::Debug for Dual {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
