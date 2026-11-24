@@ -57,7 +57,6 @@ impl Eigen {
     }
 }
 
-
 /// Relative symmetry check for a dense row-major matrix.
 ///
 /// The Jacobi iteration assumes symmetry; without this check an asymmetric input

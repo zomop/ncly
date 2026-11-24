@@ -80,14 +80,20 @@ fn matmul_batched(lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
     if a[0] != b[0] {
         return Err(NclyError::shape_mismatch(
             "matmul",
-            format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+            format!(
+                "({}, {}, {}) x ({}, {}, {})",
+                a[0], a[1], a[2], b[0], b[1], b[2]
+            ),
             "batch dimensions differ",
         ));
     }
     if a[2] != b[1] {
         return Err(NclyError::shape_mismatch(
             "matmul",
-            format!("({}, {}, {}) x ({}, {}, {})", a[0], a[1], a[2], b[0], b[1], b[2]),
+            format!(
+                "({}, {}, {}) x ({}, {}, {})",
+                a[0], a[1], a[2], b[0], b[1], b[2]
+            ),
             format!("inner dimensions {} and {} differ", a[2], b[1]),
         ));
     }
