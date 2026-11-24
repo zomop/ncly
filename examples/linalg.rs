@@ -1,6 +1,6 @@
 //! Dense linear algebra: LU, QR least squares, Cholesky, eigenvalues.
 //!
-//! Run with: `cargo run --release --example linalg`
+//! Run with: `cargo run --release -p ncly --example linalg`
 
 use ncly::linalg::{self, cholesky::Cholesky, eigen, qr::Qr, Matrix};
 use ncly::NclyError;

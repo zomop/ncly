@@ -42,10 +42,12 @@ jobs:
           cargo test --workspace --quiet || exit 1
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet || exit 1
           # The README calls these files "runnable", so they are actually run.
-          # Compiling is not enough: a panicking example still builds.
+          # Compiling is not enough: a panicking example still builds. `-p ncly` is
+          # required because this is a virtual workspace manifest, and the examples
+          # are declared in that package.
           for example in tensors autodiff linalg sparse graph; do
             echo "running example: $example"
-            cargo run --quiet --release --example "$example" > /dev/null || exit 1
+            cargo run --quiet --release -p ncly --example "$example" > /dev/null || exit 1
           done
   python:
     runs-on: ubuntu-latest

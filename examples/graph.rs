@@ -1,6 +1,6 @@
 //! A dataflow graph, its execution plan, and the effect of the optimiser.
 //!
-//! Run with: `cargo run --release --example graph`
+//! Run with: `cargo run --release -p ncly --example graph`
 
 use std::collections::HashMap;
 

@@ -2,7 +2,7 @@
 //!
 //! `f(x, y) = sin(x·y) + x²y`, evaluated at `(0.7, -1.2)`.
 //!
-//! Run with: `cargo run --release --example autodiff`
+//! Run with: `cargo run --release -p ncly --example autodiff`
 
 use ncly::autodiff::{Dual, Tape, Variable};
 use ncly::{NclyError, Tensor};

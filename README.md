@@ -323,8 +323,8 @@ Runnable files live in [`examples/`](examples):
 | `graph.rs` | a dataflow graph, its schedule, and the optimiser's effect |
 
 ```bash
-cargo run --release --example tensors
-cargo run --release --example graph
+cargo run --release -p ncly --example tensors
+cargo run --release -p ncly --example graph
 ```
 
 ## Python examples

@@ -1,6 +1,6 @@
 //! Broadcasting, views and reductions.
 //!
-//! Run with: `cargo run --release --example tensors`
+//! Run with: `cargo run --release -p ncly --example tensors`
 
 use ncly::{NclyError, Tensor};
 

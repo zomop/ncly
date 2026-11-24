@@ -2,7 +2,7 @@
 //!
 //! Builds the 1-d Laplacian and multiplies it by a few vectors.
 //!
-//! Run with: `cargo run --release --example sparse`
+//! Run with: `cargo run --release -p ncly --example sparse`
 
 use ncly::sparse::CsrMatrix;
 use ncly::NclyError;
