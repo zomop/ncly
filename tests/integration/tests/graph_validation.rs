@@ -137,7 +137,7 @@ fn fully_constant_subgraph_is_baked_into_a_leaf() {
 
     // Only `x` is supplied: the chain is baked in and `c` is gone.
     let mut values = HashMap::new();
-    values.insert(NodeId(optimised.remap[&x.0]), x_value);
+    values.insert(NodeId(optimised.remap[&x.0]), x_value.clone());
     let target = NodeId(optimised.remap[&output.0]);
     let actual = optimised
         .graph
