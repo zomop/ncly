@@ -484,6 +484,7 @@ impl CsrMatrix {
     /// the mirror entries exist — a matrix can be structurally symmetric and
     /// numerically asymmetric, which is exactly what preconditioners need to know.
     #[must_use]
+    #[allow(clippy::float_cmp)] // symmetry is exact; approximation would be a different question
     pub fn is_numerically_symmetric(&self) -> bool {
         if !self.is_symmetric_pattern() {
             return false;

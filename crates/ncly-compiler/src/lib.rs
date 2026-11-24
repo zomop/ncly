@@ -14,7 +14,7 @@
 //!
 //! ```
 //! use ncly_compiler::{optimize, Passes};
-//! use ncly_graph::{Graph, Op};
+//! use ncly_graph::{Graph, NodeId, Op};
 //!
 //! let mut graph = Graph::new();
 //! let a = graph.input([2], "a");
@@ -28,7 +28,10 @@
 //! // `one` and `neg` are not reachable from the output.
 //! assert_eq!(result.removed_dead, 2);
 //! assert_eq!(result.removed_duplicates, 1);
-//! assert!(result.graph.node(result.remap[&sum.0]).is_ok());
+//! assert!(result
+//!     .graph
+//!     .node(NodeId(result.remap[&sum.0]))
+//!     .is_ok());
 //! assert!(!result.remap.contains_key(&unused.0));
 //! # Ok::<(), ncly_core::NclyError>(())
 //! ```
@@ -437,11 +440,18 @@ mod tests {
         // merged into `exp`, and the caller-supplied constant `c` disappears with
         // the subgraph that consumed it.
         assert_eq!(result.graph.len(), 4, "{}", result.graph.describe());
-        // Nothing is dead: reachability is decided on the *input* graph, where
-        // `c` still feeds `exp`. Dropping `c` is a consequence of folding, not of
-        // dead-code elimination, so the counter stays at zero.
-        assert_eq!(result.removed_dead, 0);
-        assert!(!result.remap.contains_key(&constant.0));
+        assert_eq!(result.removed_dead, 0, "{}", result.graph.describe());
+        // `c` lost its own node: the rebuilt graph has no input of that name,
+        // because the subgraph that consumed it was replaced by baked leaves.
+        assert!(
+            !result
+                .graph
+                .nodes()
+                .iter()
+                .any(|node| node.name.as_deref() == Some("c")),
+            "{}",
+            result.graph.describe()
+        );
 
         // Numerical check: the folded leaf equals exp(c) * exp(c).
         let mut values = HashMap::new();

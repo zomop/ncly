@@ -32,16 +32,22 @@
 //! proportional to the forward pass, independent of the number of inputs.
 //!
 //! ```
-//! use ncly_autodiff::Variable;
+//! use ncly_autodiff::{Tape, Variable};
 //!
-//! let x = Variable::new(2.0, "x");
-//! let y = Variable::new(3.0, "y");
+//! // Both leaves must be recorded on the *same* tape. `with_tape` installs one
+//! // and `Variable::auto` joins it; combining variables from different tapes
+//! // panics rather than producing a wrong gradient.
+//! let tape = Tape::new();
+//! let guard = Variable::with_tape(&tape);
+//! let x = Variable::auto(2.0, "x");
+//! let y = Variable::auto(3.0, "y");
 //! let loss = (&x * &y).powi(2).sum();
 //! loss.backward();
 //!
 //! // d/dx (xy)^2 = 2x y^2 = 36 ; d/dy = 2 x^2 y = 24
 //! assert!((x.grad_scalar().unwrap() - 36.0).abs() < 1e-12);
 //! assert!((y.grad_scalar().unwrap() - 24.0).abs() < 1e-12);
+//! drop(guard);
 //! ```
 //!
 //! # Correctness strategy

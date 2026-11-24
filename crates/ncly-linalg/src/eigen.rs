@@ -390,8 +390,9 @@ fn two_by_two(h: &[f64], n: usize, start: usize) -> (f64, f64, f64, f64) {
         // would cause when `trace` and `root` are close.
         //
         // The subtraction that follows is deliberate (`clippy::suboptimal_flops`
-        // would rewrite it as an addition and flip the sign of the root).
-        #[allow(clippy::suboptimal_flops)]
+        // would rewrite it as an addition and flip the sign of the root), and the
+        // multiplication by 0.5 is not a midpoint average that could overflow.
+        #[allow(clippy::suboptimal_flops, clippy::manual_midpoint)]
         let q = 0.5 * (trace + trace.signum() * root);
         let l1 = if q == 0.0 { 0.0 } else { q };
         // Vieta: the product of the roots is the determinant.
@@ -436,7 +437,7 @@ fn implicit_qr_step(h: &mut [f64], n: usize, low: usize, high: usize, shift: f64
         // Right: columns `k`, `k+1`, over the rows the bulge can reach. Rows
         // below `k+2` are zero there already; touching them would push mass back
         // into the subdiagonal this rotation just cleared.
-        for i in 0..(k + 2).min(high) + 1 {
+        for i in 0..=(k + 2).min(high) {
             let left = h[i * n + k];
             let right = h[i * n + k + 1];
             h[i * n + k] = c * left + s * right;

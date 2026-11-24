@@ -531,9 +531,24 @@ impl Variable {
     // Differentiable operations
     // -----------------------------------------------------------------
 
+    /// Panic if `other` lives on a different tape.
+    ///
+    /// Gradients are accumulated per tape, so combining two variables from
+    /// different tapes would record a node whose parent index belongs to another
+    /// tape — silently wrong gradients. Checked in release builds too: the cost is
+    /// one `Arc` pointer comparison.
+    fn assert_same_tape(&self, other: &Variable) {
+        assert!(
+            Arc::ptr_eq(&self.tape.nodes, &other.tape.nodes),
+            "autodiff: cannot combine variables from different tapes; \
+             build them with `Variable::auto` inside `Variable::with_tape`, or on one explicit `Tape`"
+        );
+    }
+
     /// Element-wise sum of two variables (with broadcasting).
     #[must_use]
     pub fn add(&self, rhs: &Variable) -> Variable {
+        self.assert_same_tape(rhs);
         let data = self
             .value()
             .add(&rhs.value())
@@ -553,6 +568,7 @@ impl Variable {
     /// Element-wise subtraction (with broadcasting).
     #[must_use]
     pub fn sub(&self, rhs: &Variable) -> Variable {
+        self.assert_same_tape(rhs);
         let data = self
             .value()
             .sub(&rhs.value())
@@ -572,6 +588,7 @@ impl Variable {
     /// Element-wise product (with broadcasting).
     #[must_use]
     pub fn mul(&self, rhs: &Variable) -> Variable {
+        self.assert_same_tape(rhs);
         let (a, b) = (self.value(), rhs.value());
         let data = a.mul(&b).expect("broadcast failed in mul");
         // ∂(ab)/∂a = b ; ∂(ab)/∂b = a
@@ -588,6 +605,7 @@ impl Variable {
     /// Element-wise division (with broadcasting).
     #[must_use]
     pub fn div(&self, rhs: &Variable) -> Variable {
+        self.assert_same_tape(rhs);
         let (a, b) = (self.value(), rhs.value());
         let data = a.div(&b).expect("broadcast failed in div");
         // ∂(a/b)/∂a = 1/b ; ∂(a/b)/∂b = -a/b²
@@ -861,6 +879,7 @@ impl Variable {
 
     /// Matrix product of two 2-d variables.
     pub fn matmul(&self, rhs: &Variable) -> Result<Variable> {
+        self.assert_same_tape(rhs);
         let (a, b) = (self.value(), rhs.value());
         let data = a.matmul(&b)?;
         // ∂L/∂A = G·Bᵀ ; ∂L/∂B = Aᵀ·G. Both are matrix products, *not*
@@ -899,6 +918,7 @@ impl Variable {
     /// genuinely undefined; NCLY does not average the two.
     #[must_use]
     pub fn maximum(&self, rhs: &Variable) -> Variable {
+        self.assert_same_tape(rhs);
         let (a, b) = (self.value(), rhs.value());
         let data = a.maximum(&b).expect("broadcast failed in maximum");
         let lhs_mask = Tensor::from_fn(data.shape().dims().to_vec(), |index| {
