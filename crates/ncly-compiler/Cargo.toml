@@ -1,0 +1,16 @@
+[package]
+name = "ncly-compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Optimising passes over NCLY graphs: constant folding, CSE, dead-node elimination"
+
+[dependencies]
+ncly-core = { workspace = true }
+ncly-graph = { workspace = true }
+ncly-tensor = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,37 @@
+name: bench
+on:
+  push:
+    branches: ['arena/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: bench
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - name: run benchmarks
+        run: |
+          # `set -o pipefail` so a panicking benchmark is a job failure: a run that
+          # produced no numbers must never be reported as a successful measurement.
+          set -o pipefail
+          {
+            echo "host: $(uname -srm)"
+            echo "rustc: $(rustc --version)"
+            grep -m1 'model name' /proc/cpuinfo || true
+            cargo run --release -p ncly-benchmarks 2>&1 | grep -v '^\s*Compiling'
+          } > /tmp/bench.txt 2>&1 || status=$?
+          python3 .github/ci/post_log.py /tmp/bench.txt
+          cat /tmp/bench.txt
+          # Fail after the log is posted, so the numbers are never lost.
+          exit "${status:-0}"
+      - name: check the --json output
+        run: |
+          # `BENCHMARKS.md` documents `--json`, so CI has to prove it parses.
+          # A single filtered case keeps this cheap.
+          cargo run --release -p ncly-benchmarks -- sum --json > /tmp/bench.json
+          python3 scripts/check_bench_json.py /tmp/bench.json

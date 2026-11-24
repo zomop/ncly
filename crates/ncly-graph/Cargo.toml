@@ -1,0 +1,15 @@
+[package]
+name = "ncly-graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Dataflow graph with shape inference, validation and scheduling for NCLY"
+
+[dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
+
+[lints]
+workspace = true

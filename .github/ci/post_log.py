@@ -1,0 +1,81 @@
+"""Upload a build log to the commit as chunked Markdown comments.
+
+Job logs are not retrievable through the API for this repository, so each job
+posts its output here instead: the commit becomes the place where a red run
+explains itself. Diagnostics are printed either way, so a failed upload is
+visible in the step output rather than silently swallowing the log.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+CHUNK = 55_000
+MAX_CHUNKS = 40
+
+
+def post(token: str, repo: str, sha: str, body: str) -> None:
+    url = f"https://api.github.com/repos/{repo}/commits/{sha}/comments"
+    payload = json.dumps({"body": body}).encode()
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+        },
+    )
+    urllib.request.urlopen(request, timeout=30).read()
+
+
+def main() -> int:
+    path = sys.argv[1]
+    try:
+        log = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        log = "(log file missing)"
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    sha = os.environ.get("GITHUB_SHA")
+    # Several jobs post on the same commit; the run name keeps them apart when
+    # reading the comments back out.
+    run_name = os.environ.get("CIRUN") or "ncly"
+    if not (token and repo and sha):
+        print(
+            "post_log: missing credentials, skipping upload "
+            f"(token={bool(token)}, repo={repo!r}, sha={sha!r})"
+        )
+        return 0
+    body = log[-CHUNK * MAX_CHUNKS :]
+    total = max(1, (len(body) + CHUNK - 1) // CHUNK)
+    for index in range(total):
+        chunk = body[index * CHUNK : (index + 1) * CHUNK]
+        try:
+            post(
+                token,
+                repo,
+                sha,
+                f"{run_name} log {index + 1}/{total}\n```\n{chunk}\n```\n",
+            )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:400]
+            print(
+                f"post_log: HTTP {exc.code} posting {run_name} to {repo}@{sha[:8]}: "
+                f"{detail!r} (token present: {bool(token)})"
+            )
+            return 0
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            print(f"post_log: upload failed for {repo}@{sha[:8]}: {exc!r}")
+            return 0
+    print(f"post_log: uploaded {len(body)} chars in {total} chunk(s) as {run_name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

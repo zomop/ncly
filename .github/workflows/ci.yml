@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: never
+  RUSTFLAGS: -D warnings
+
+# Needed so each job can post its log to the commit: job logs are not retrievable
+# from the API for this repository, so the log has to travel with the commit.
+permissions:
+  contents: write
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: clippy
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup component add clippy
+      - name: clippy
+        run: |
+          set +e
+          {
+            rustc --version
+            cargo clippy --workspace --all-targets -- -D warnings
+          } > /tmp/log.txt 2>&1
+          status=$?
+          python3 .github/ci/post_log.py /tmp/log.txt
+          tail -60 /tmp/log.txt
+          if [ "$status" -ne 0 ]; then
+            # Surface the failure where it can be read: job logs are not
+            # retrievable through the API here, so the tail also becomes check
+            # annotations, which do have an API.
+            # Prefer the error lines themselves; a plain tail is usually just
+            # `Compiling ...` noise from before the failure.
+            grep -E -A3 '^(error|warning: build failed|Caused by)' /tmp/log.txt \
+              | head -40 > /tmp/errs.txt
+            [ -s /tmp/errs.txt ] || tail -25 /tmp/log.txt > /tmp/errs.txt
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              echo "::error file=.github/workflows/ci.yml::${line//%/%%}"
+            done < /tmp/errs.txt
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-clippy
+          path: /tmp/log.txt
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: test-${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - name: build and test
+        shell: bash
+        run: |
+          set +e
+          {
+            uname -a
+            rustc --version
+            cargo build --workspace --all-targets
+            cargo test --workspace --all-targets
+          } > /tmp/log.txt 2>&1
+          status=$?
+          python3 .github/ci/post_log.py /tmp/log.txt
+          tail -80 /tmp/log.txt
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-test-${{ matrix.os }}
+          path: /tmp/log.txt
+
+  msrv:
+    name: minimum supported Rust
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CIRUN: msrv
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install 1.75 --profile minimal
+      - name: build with 1.75
+        run: |
+          set +e
+          {
+            cargo +1.75 --version
+            cargo +1.75 build --workspace
+          } > /tmp/log.txt 2>&1
+          status=$?
+          python3 .github/ci/post_log.py /tmp/log.txt
+          tail -60 /tmp/log.txt
+          if [ "$status" -ne 0 ]; then
+            # Surface the failure where it can be read: job logs are not
+            # retrievable through the API here, so the tail also becomes check
+            # annotations, which do have an API.
+            # Prefer the error lines themselves; a plain tail is usually just
+            # `Compiling ...` noise from before the failure.
+            grep -E -A3 '^(error|warning: build failed|Caused by)' /tmp/log.txt \
+              | head -40 > /tmp/errs.txt
+            [ -s /tmp/errs.txt ] || tail -25 /tmp/log.txt > /tmp/errs.txt
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              echo "::error file=.github/workflows/ci.yml::${line//%/%%}"
+            done < /tmp/errs.txt
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-msrv
+          path: /tmp/log.txt

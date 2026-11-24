@@ -1,0 +1,82 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ncly-core",
+    "crates/ncly-tensor",
+    "crates/ncly-simd",
+    "crates/ncly-autodiff",
+    "crates/ncly-linalg",
+    "crates/ncly-sparse",
+    "crates/ncly-graph",
+    "crates/ncly-compiler",
+    "crates/ncly",
+    "crates/ncly-python",
+    "tests/integration",
+    "benchmarks",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+authors = ["NCLY contributors"]
+repository = "https://github.com/zomop/ncly"
+homepage = "https://github.com/zomop/ncly"
+documentation = "https://docs.rs/ncly"
+readme = "README.md"
+keywords = ["numerical", "tensor", "autodiff", "linear-algebra", "sparse"]
+categories = ["science", "mathematics"]
+
+[workspace.dependencies]
+ncly-core = { version = "0.1.0", path = "crates/ncly-core" }
+ncly-tensor = { version = "0.1.0", path = "crates/ncly-tensor" }
+ncly-simd = { version = "0.1.0", path = "crates/ncly-simd" }
+ncly-autodiff = { version = "0.1.0", path = "crates/ncly-autodiff" }
+ncly-linalg = { version = "0.1.0", path = "crates/ncly-linalg" }
+ncly-sparse = { version = "0.1.0", path = "crates/ncly-sparse" }
+ncly-graph = { version = "0.1.0", path = "crates/ncly-graph" }
+ncly-compiler = { version = "0.1.0", path = "crates/ncly-compiler" }
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+# Deliberately allowed, with reasons:
+#   cast_possible_wrap  — strides are `isize` by design (negative strides are a
+#                         planned feature) and every conversion is size-checked.
+#   wildcard_imports    — `use crate::*` inside a crate is idiomatic here and
+#                         keeps the module preludes readable.
+#   doc_markdown        — acronyms like `LU`, `QR`, `CSR` would be needlessly
+#                         backticked in prose.
+#   must_use_candidate  — most `Self`-returning methods are value semantics;
+#                         annotating every one of them is noise.
+cast_possible_wrap = "allow"
+wildcard_imports = "allow"
+doc_markdown = "allow"
+must_use_candidate = "allow"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.test]
+opt-level = 2

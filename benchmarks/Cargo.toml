@@ -1,0 +1,25 @@
+[package]
+name = "ncly-benchmarks"
+description = "Reproducible micro-benchmarks for NCLY kernels"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+ncly-core = { workspace = true }
+ncly-tensor = { workspace = true }
+ncly-simd = { workspace = true }
+ncly-linalg = { workspace = true }
+ncly-sparse = { workspace = true }
+ncly-autodiff = { workspace = true }
+ncly-graph = { workspace = true }
+ncly-compiler = { workspace = true }
+
+[[bin]]
+name = "ncly-bench"
+path = "src/main.rs"
+
+[lints]
+workspace = true
