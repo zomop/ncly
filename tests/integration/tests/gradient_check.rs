@@ -33,7 +33,7 @@ fn scalar_compositions_match_finite_differences() {
     let cases: Vec<(&str, fn(Dual) -> Dual, fn(f64) -> f64)> = vec![
         ("x^2 + 3x", |d| d * d + 3.0f64 * d, |x| x * x + 3.0 * x),
         ("sin(x)cos(x)", |d| d.sin() * d.cos(), |x| x.sin() * x.cos()),
-        ("exp(-x^2)", |d| (d * d).neg().exp(), |x| (-(x * x)).exp()),
+        ("exp(-x^2)", |d| (-(d * d)).exp(), |x| (-(x * x)).exp()),
         (
             "ln(1+x^2)",
             |d| (1.0f64 + d * d).ln(),

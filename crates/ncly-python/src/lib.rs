@@ -26,6 +26,11 @@
 //! building an expression graph is `O(nodes)` Python objects but a single Rust
 //! `Arc` per tape.
 
+// PyO3's `#[pyfunction]`/`#[pymethods]` machinery extracts arguments by value, so
+// `Vec<f64>` and friends are the required signature type even where a slice would
+// do. Clippy cannot see that through the expanded code.
+#![allow(clippy::needless_pass_by_value)]
+
 use ncly_core::NclyError;
 use ncly_tensor::Tensor as RsTensor;
 use pyo3::exceptions::{PyArithmeticError, PyIndexError, PyValueError, PyZeroDivisionError};
@@ -688,14 +693,15 @@ fn collect(
         .map_err(|_| PyValueError::new_err("expected a number or a sequence of numbers"))?;
     let items: Vec<Bound<'_, PyAny>> = sequence.collect::<PyResult<Vec<_>>>()?;
     let length = items.len();
-    if depth < shape.len() {
-        if shape[depth] != length {
-            return Err(PyValueError::new_err("ragged nested sequence"));
+    match depth.cmp(&shape.len()) {
+        std::cmp::Ordering::Less if shape[depth] != length => {
+            return Err(PyValueError::new_err("ragged nested sequence"))
         }
-    } else if depth == shape.len() {
-        shape.push(length);
-    } else {
-        return Err(PyValueError::new_err("ragged nested sequence"));
+        std::cmp::Ordering::Less => {}
+        std::cmp::Ordering::Equal => shape.push(length),
+        std::cmp::Ordering::Greater => {
+            return Err(PyValueError::new_err("ragged nested sequence"))
+        }
     }
     for item in items {
         collect(&item, values, shape, depth + 1)?;

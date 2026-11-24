@@ -39,7 +39,7 @@ fn main() -> Result<(), NclyError> {
     // --- Symmetric eigen-decomposition -------------------------------------
     let symmetric = [2.0, 1.0, 1.0, 2.0];
     let eigen::Eigen { values, vectors } = eigen::symmetric(&symmetric, 2)?;
-    println!("eigenvalues      λ = {:?}", values);
+    println!("eigenvalues      λ = {values:?}");
     println!("eigenvectors     first = {:?}", &vectors[0][..]);
 
     // --- A singular matrix is reported, not hidden -------------------------
