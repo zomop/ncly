@@ -417,16 +417,17 @@ figures — with the machine, toolchain and flags they came from — are in
 Three data points from that file, chosen because they are honest rather than
 flattering:
 
-- single-threaded `matmul` reaches 7.5–8.6 GFLOP/s for 64–256 and drops to 4.5 at
-  512×512 — a missing register-blocked GEMM, and the reason multithreading is on
+- single-threaded `matmul` reaches 12.3–13.4 GFLOP/s for 64–256 and drops to 11.0
+  at 512×512 — a missing register-blocked GEMM, and the reason multithreading is on
   the roadmap;
-- `tensor add` moves about 9.8 GiB/s against 49.9 GiB/s for a bare `axpy` on the
+- `tensor add` moves about 17.7 GiB/s against 100.3 GiB/s for a bare `axpy` on the
   same element count — the cost of the broadcast plan around the kernel;
-- the optimiser takes a graph with a repeated constant subexpression from 1.577 ms
-  to 1.187 ms, and the optimised graph needs no constant inputs at all.
+- the optimiser takes a graph with a repeated constant subexpression from 0.704 ms
+  to 0.576 ms, and the optimised graph needs no constant inputs at all.
 
 Runs on a shared CI vCPU differ by roughly 10–40%, so quote the ranges, not the
-point values.
+point values. The figures above are from a single green run whose log is attached
+to that commit; the machine is named in `BENCHMARKS.md`.
 
 ## Project layout
 

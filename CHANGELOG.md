@@ -118,6 +118,13 @@ First functional release. Everything below is implemented and covered by tests.
   and random 5×5/8×8 matrices.
 - The general 2×2 eigenvalue solver had the sign of the quadratic root wrong, so
   real eigenvalues came back negated whenever the trace was negative.
+- `usize::is_multiple_of` (Rust 1.87) was used in the LU determinant sign, which
+  broke the declared 1.75 MSRV; parity is now `% 2 == 0`, with the
+  `manual_is_multiple_of` lint allowed and the conflict documented in the crate.
+- Clippy was wired as a log-only diagnostic in the development workflow rather
+  than a gate, so two lints (a 101-line function and a by-reference 3-byte
+  argument) reached the pull request. It is now a gate, and every CI job posts
+  its log to the commit and emits check annotations on failure.
 - Combining two `Variable`s from different tapes silently produced a wrong
   gradient; it is now a panic with an explanatory message.
 - Common-subexpression elimination merged distinct `Input` nodes: two leaves with
