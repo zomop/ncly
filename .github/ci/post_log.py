@@ -1,7 +1,9 @@
 """Upload a build log to the commit as chunked Markdown comments.
 
-Used only by CI so that logs written on a runner are retrievable from the
-commit itself when live log streaming is unavailable.
+Job logs are not retrievable through the API for this repository, so each job
+posts its output here instead: the commit becomes the place where a red run
+explains itself. Diagnostics are printed either way, so a failed upload is
+visible in the step output rather than silently swallowing the log.
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 CHUNK = 55_000
@@ -38,11 +41,11 @@ def main() -> int:
     except OSError:
         log = "(log file missing)"
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    sha = os.environ.get("GITHUB_SHA")
     # Several jobs post on the same commit; the run name keeps them apart when
     # reading the comments back out.
     run_name = os.environ.get("CIRUN") or "ncly"
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    sha = os.environ.get("GITHUB_SHA")
     if not (token and repo and sha):
         print(
             "post_log: missing credentials, skipping upload "
@@ -60,10 +63,17 @@ def main() -> int:
                 sha,
                 f"{run_name} log {index + 1}/{total}\n```\n{chunk}\n```\n",
             )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:400]
+            print(
+                f"post_log: HTTP {exc.code} posting {run_name} to {repo}@{sha[:8]}: "
+                f"{detail!r} (token present: {bool(token)})"
+            )
+            return 0
         except Exception as exc:  # noqa: BLE001 - diagnostics only
             print(f"post_log: upload failed for {repo}@{sha[:8]}: {exc!r}")
             return 0
-    print(f"post_log: uploaded {len(body)} chars in {total} chunk(s)")
+    print(f"post_log: uploaded {len(body)} chars in {total} chunk(s) as {run_name}")
     return 0
 
 
